@@ -43,20 +43,22 @@
 ## Producción y pruebas (una sola dirección: el 5180)
 
 - `http://10.148.223.143:5180` (compañeros) = `http://localhost:5180`: ventana «CDM Auditorias Calidad
-  (5180)» que abre `arrancar.cmd` sobre `publicacion\app`. Al día desde el **08-10-2026** (lo anterior más T0 y planes de acción).
+  (5180)» que abre `arrancar.cmd` sobre `publicacion\app`. Al día desde el **09-10-2026** (lo anterior más las gráficas de General y Formación en paralelo).
 - **Publicar** (solo si el usuario lo pide): cerrar esa ventana → `cmd /c "C:\Proyectos\CDM Auditorias
   Calidad\publicar.cmd"` → `arrancar.cmd` con ruta completa. Si cambia el formato del cubo de No
   solución o de la caché de GAIA (`DatosGaia.VersionActual`), copiar antes la caché de `App_Data` a
   `publicacion\datos` para no esperar a BigQuery.
 - **Probar** en una copia temporal en otro puerto (p. ej. 5190: `ASPNETCORE_URLS=http://localhost:5190
   dotnet run --no-build --no-launch-profile`) y **pararla al acabar**. Parar la web antes de compilar
-  (la DLL queda bloqueada). Pruebas: `dotnet test "CDM Auditorias Calidad.sln"` (327 en verde).
+  (la DLL queda bloqueada). Pruebas: `dotnet test "CDM Auditorias Calidad.sln"` (336 en verde).
 - Capturas: Edge sin ventana con `--force-prefers-reduced-motion` (o `scripts/capturas.py` de la skill).
   Si el usuario dice «sin capturas», verificar con texto y medidas: las imágenes gastan muchos tokens.
 
 ## Decisiones del usuario que no hay que deshacer
 
 - Variación de «Total auditorías» y de la nota: frente al mismo tiempo justo antes (no el DATEADD del PBI).
+- General y Formación & Calidad: «Evolución de auditorías» y «Nota promedio de calidad» **en paralelo** (09-10-2026; antes a todo el
+  ancho). Las pastillas que no caben sin pisarse no se rotulan (guía 9.15).
 - Filtros que se aplican al marcar, con el desplegable abierto; portada con «General» y «CDM No solución».
 - «Total agentes» = nómina (Agente, Agente en Capacitacion, Aprendiz Sena Etapa Productiva) vs. auditados.
 - No solución, «Sin acceso a internet»: **una causa por llamada** (proceso, proceso con fallos de

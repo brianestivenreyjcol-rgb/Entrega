@@ -515,6 +515,10 @@ html[data-presentacion] .pres-salir {
   animation: aparecer var(--mov-aparicion) var(--mov-curva) both; animation-delay: calc(var(--mov-escalon) * 5);
 }
 .rejilla-2 > .tarjeta:nth-child(2) { animation-delay: calc(var(--mov-escalon) * 6); }
+/* Gráficas por tiempo en pareja (General y Formación): la más baja (columnas, 262 px) crece hasta el alto de su vecina
+   (línea, .indicador-fig 320 px) para que las dos tarjetas acaben igual; todo va en %, así que se estira sin deformarse. */
+.rejilla-2 > .crono-tarjeta { display: flex; flex-direction: column; }
+.rejilla-2 > .crono-tarjeta > .grafica { flex: 1 0 auto; }
 .tarjeta-cabecera {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "titulo extra" "nota extra"; align-items: center; column-gap: 12px;
   margin: -16px -18px 12px; padding: 13px 18px; border-bottom: 1px solid var(--borde);

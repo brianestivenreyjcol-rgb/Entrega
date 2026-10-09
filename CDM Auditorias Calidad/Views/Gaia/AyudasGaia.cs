@@ -318,24 +318,42 @@ public static class AyudasGaia
     }
 
     /// <summary>
-    /// En qué puntos va la pastilla con el valor: en todos si caben; si no (más de ~20 periodos), en uno de cada dos
-    /// (o de cada tantos como haga falta para que no se pisen) y siempre en el primero y el último.
+    /// En qué puntos va la pastilla con el valor: en todos si caben; si no, en los que caben sin pisarse (uno de cada dos o de
+    /// cada tantos como haga falta) y siempre en el primero y el último. Cuenta con el sitio de verdad de cada pastilla sobre
+    /// un plano de <see cref="GraficoGaia.AnchoEstimado"/> px: centrada en su punto, salvo la primera y la última, que se
+    /// corren hacia dentro (.al-inicio / .al-final del CSS: el 84 % de la pastilla queda del lado del plano).
     /// </summary>
     public static HashSet<int> Rotulados(GraficoGaia g)
     {
         var n = g.Etiquetas.Count;
-        var ancho = g.Segundos ? 46 : g.Entero ? 42 : 58;
-        var salto = (int)Math.Ceiling(n * (double)ancho / g.AnchoEstimado);
-        if (g.Dia && n > 20) salto = Math.Max(2, salto);
-        if (salto <= 1) return Enumerable.Range(0, n).ToHashSet();
         var r = new HashSet<int>();
-        for (var i = 0; i < n; i += salto) r.Add(i);
-        var ultimo = n - 1;
-        if (ultimo >= 0 && !r.Contains(ultimo))
+        if (n == 0) return r;
+        double ancho = g.Segundos ? 46 : g.Entero ? 42 : 58;
+        const double hueco = 4;
+        const double haciaDentro = 0.84;
+        double Centro(int i) => (i + 0.5) / n * g.AnchoEstimado;
+        double Izquierda(int i) => Centro(i) - ancho * (i == 0 ? 1 - haciaDentro : i == n - 1 ? haciaDentro : 0.5);
+        double Derecha(int i) => Centro(i) + ancho * (i == 0 ? haciaDentro : i == n - 1 ? 1 - haciaDentro : 0.5);
+
+        // Con muchos días, como mucho uno de cada dos aunque quepan: si no, la gráfica es una fila de pastillas.
+        var pasoMinimo = g.Dia && n > 20 ? 2 : 1;
+        var previo = 0;
+        r.Add(0);
+        for (var i = 1; i < n - 1; i++)
         {
-            var previo = r.Max();
-            if (ultimo - previo < (salto + 1) / 2) r.Remove(previo);
-            r.Add(ultimo);
+            if (i - previo < pasoMinimo || Izquierda(i) < Derecha(previo) + hueco) continue;
+            r.Add(i);
+            previo = i;
+        }
+        if (n > 1)
+        {
+            // La última siempre: si pisa la anterior, se quita la anterior (nunca la primera).
+            while (previo > 0 && (n - 1 - previo < pasoMinimo || Izquierda(n - 1) < Derecha(previo) + hueco))
+            {
+                r.Remove(previo);
+                previo = r.Max();
+            }
+            r.Add(n - 1);
         }
         return r;
     }

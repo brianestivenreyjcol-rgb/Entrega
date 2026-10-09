@@ -85,6 +85,9 @@
   nombres de agentes y auditores). Ver 7.
 
 ---
+- **Gráficas por tiempo en paralelo** (09-10-2026, pedido del usuario): en General y Formación & Calidad, «Evolución de
+  auditorías» y «Nota promedio de calidad» van una al lado de la otra (`.rejilla-2`); a media tarjeta caben menos pastillas y
+  `AyudasGaia.Rotulados` pone solo las que no se pisan (siempre la primera y la última; el resto de valores, en la ficha).
 
 ## 3 bis. Estilo: guía SOLARIS · GAIA (desde el 02-10-2026)
 

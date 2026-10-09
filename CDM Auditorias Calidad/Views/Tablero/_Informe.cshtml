@@ -75,21 +75,24 @@
             }
             else
             {
-            @* Las dos gráficas por tiempo, a todo el ancho: así cada columna y cada punto cabe con su valor en una pastilla. *@
-            <section class="tarjeta crono-tarjeta">
-                <header class="tarjeta-cabecera">
-                    <h2>Evolución de auditorías</h2>
-                    <span class="tarjeta-nota">Total por @porVista</span>
-                </header>
-                <partial name="Graficos/_Columnas" model="Model" />
-            </section>
-            <section class="tarjeta crono-tarjeta">
-                <header class="tarjeta-cabecera">
-                    <h2>Nota promedio de calidad</h2>
-                    <span class="tarjeta-nota">Media por @porVista</span>
-                </header>
-                <partial name="Graficos/_Linea" model="Model" />
-            </section>
+            @* Las dos gráficas por tiempo, una al lado de la otra (pedido del usuario el 09-10-2026; en móvil se apilan). Van a media
+               tarjeta: _Columnas y _Linea lo dicen con AnchoEstimado, y con muchos periodos la pastilla va en uno de cada pocos. *@
+            <div class="rejilla-2">
+                <section class="tarjeta crono-tarjeta">
+                    <header class="tarjeta-cabecera">
+                        <h2>Evolución de auditorías</h2>
+                        <span class="tarjeta-nota">Total por @porVista</span>
+                    </header>
+                    <partial name="Graficos/_Columnas" model="Model" />
+                </section>
+                <section class="tarjeta crono-tarjeta">
+                    <header class="tarjeta-cabecera">
+                        <h2>Nota promedio de calidad</h2>
+                        <span class="tarjeta-nota">Media por @porVista</span>
+                    </header>
+                    <partial name="Graficos/_Linea" model="Model" />
+                </section>
+            </div>
 
             <div class="rejilla-2">
                 <section class="tarjeta">

@@ -345,8 +345,8 @@ los tipos de las gráficas genéricas (`GraficoGaia`, `SerieGaia`, `SelectorGaia
 ### 9.8 GAIA Formación: pastillas, total al pie y color por marca (06-10-2026)
 
 - **Etiquetas:** cada punto de una línea y cada columna lleva su valor en una pastilla `.etiqueta-punto` (tinte suave de `--serie`, borde fino y
-  texto 600 en el tono oscuro de la serie). Con más de ~20 periodos se rotula uno de cada dos o menos, según el ancho
-  (`AyudasGaia.Rotulados`), siempre el primero y el último. Las pastillas por umbral (adherencia) toman `--malo` / `--atencion` / `--bueno`.
+  texto 600 en el tono oscuro de la serie). Si no caben todas, se rotulan las que caben sin pisarse
+  (`AyudasGaia.Rotulados`, con el ancho real de cada pastilla; ver 9.15), siempre el primero y el último. Las pastillas por umbral (adherencia) toman `--malo` / `--atencion` / `--bueno`.
   La dispersión de agentes no rotula nada sobre los puntos: su leyenda lleva los totales.
 - **Total al pie:** toda tabla con cifras (Ranking, Estilo, Rendimiento, Comercial, Motivos, Españolización, por marca) lleva `<tfoot><tr class="total">`
   con «TOTAL»; en las listas que no son tabla (árbol de motivos, Llamadas), una `.fila-total` al final.
@@ -415,8 +415,7 @@ suma de las filas; Motivos: la suma de las tipologías; Internet: el de las aver
 `GraficoGaia`). `GraficoGaia` ganó `SinVolumen` (la ficha no lleva «Llamadas N») y `FichaExtra` (un texto más por periodo, p. ej.
 «Nota 85,20 %»); `AyudasGaia.Ficha(g, i)` escribe el `<title>` de la banda. Cada punto y cada columna lleva su valor en una
 `.etiqueta-punto`; la primera y la última del eje llevan `.al-inicio` / `.al-final` (no tapan los números del eje) y, con tres o más marcas en
-un mismo día, `.centro` (apiladas con separación). General: las dos gráficas por tiempo van **a todo el ancho** (a media tarjeta no caben las
-pastillas), con la cifra de la meta en la leyenda. No solución: `_LineasNs` y `_EncuestasDiarias` rotulan cada punto (uno de cada pocos con
+un mismo día, `.centro` (apiladas con separación). General: las dos gráficas por tiempo van **en paralelo** desde el 09-10-2026 (antes, a todo el ancho; ver 9.15). No solución: `_LineasNs` y `_EncuestasDiarias` rotulan cada punto (uno de cada pocos con
 tantos días, siempre el primero y el último); sin «máx.», «mín.», «pico» ni media rotulada, y se quitaron del CSS `.valor`, `.fin-serie` y
 `.meta-texto`. GAIA: el selector Semana / Día (`_SelectorVistaGaia`, empieza en Semana) está ya en Resumen, Estilo, Rendimiento, Evolución,
 Comercial y Españolización.
@@ -541,3 +540,19 @@ existían: `.aviso` (hueco de PlanAccion), `.crono-tarjeta` con `_LineasGaia` (%
 semáforo pastel en la situación del detalle y `.pastilla-dato` con el legajo, y `ul.lista-ns`. La barra de cobertura de las tarjetas
 (`.resumen-cobertura`) lleva ahora el título de su tarjeta como `aria-label`. No hay variables ni clases nuevas.
 
+
+### 9.15 Gráficas por tiempo de Auditorías en paralelo y pastillas sin pisarse (09-10-2026)
+
+**En paralelo** (pedido del usuario): en General y en Formación & Calidad, «Evolución de auditorías» y «Nota promedio de calidad» van una al
+lado de la otra en una `.rejilla-2` (`Views/Tablero/_Informe.cshtml`; en móvil se apilan). Como la de columnas mide 262 px y la de línea 320 px
+(`.indicador-fig`), `.rejilla-2 > .crono-tarjeta` es una columna flexible y su `.grafica` crece (`flex: 1 0 auto`) para que las dos tarjetas
+acaben igual; todo va en %, así que se estira sin deformarse. `_Columnas` y `_Linea` dicen `AnchoEstimado = 340` (el plano de media tarjeta
+mide unos 316 px a 1.280 px de pantalla y 580 px a 1.920) y `MaxEtiquetasX = 7`.
+
+**Pastillas sin pisarse** (`AyudasGaia.Rotulados`, lo usan todas las gráficas con pastillas). Antes saltaba «uno de cada N» como si todas
+fueran centradas, y la primera y la última (`.al-inicio` / `.al-final`, el 84 % de la pastilla hacia dentro) pisaban a su vecina. Ahora coloca
+cada pastilla con su ancho (46 px en m:ss, 42 en enteros, 58 en porcentajes) sobre un plano de `AnchoEstimado` px y la pone solo si deja 4 px
+con la anterior; la última va siempre y, si pisa, se quita la anterior (nunca la primera); con más de 20 días, como mucho una de cada dos. Si
+caben todas, van todas. Medido el 09-10-2026: General y Formación sin choques de 1.280 px en adelante (en Mes, los cuatro meses); al ancho
+mínimo (1.120 px) y en móvil alguna se roza. En GAIA → Rendimiento y en No solución bajaron los choques (13 → 8 y 21 → 10 a 1.280 px): los
+que quedan son de dos series en el mismo punto. Pruebas en `RotuladosTests`.
