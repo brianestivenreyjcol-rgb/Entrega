@@ -1,0 +1,159 @@
+@model PaginaComercialGaia
+@* Comercial («Ventas», «Detalle comercial» y «Alineamientos» del PBI): cuántas llamadas llevan un intento de venta
+   (reactivo si el cliente lo pidió, proactivo si lo propuso el agente), si la oferta estaba alineada, cuántas acaban en
+   venta, qué se ofrece y qué se vende, su evolución y los agentes de más a menos ofrecimientos. *@
+@{
+    Layout = "_InformeGaia";
+}
+@if (!Model.Preparando)
+{
+    var t = Model.Total!;
+    if (t.Llamadas == 0)
+    {
+        <p class="vacio">Ninguna llamada cumple estos filtros.</p>
+    }
+    else
+    {
+        var alineadosBase = t.OfrecimientosAlineados + t.OfrecimientosNoAlineados;
+        double? alineados = alineadosBase == 0 ? null : (double)t.OfrecimientosAlineados / alineadosBase;
+        GraficoGaia OfrecimientosYVentas(string escala, IReadOnlyList<GrupoGaia> grupos)
+            => Grafico(escala, grupos, ("Ofrecimientos", "serie-a", i => i.Ofrecimientos), ("Ventas", "serie-b", i => i.PorcentajeVentas))
+               with { Descripcion = "Ofrecimientos y ventas por " + escala };
+        var porEtapa = Grafico("etapa", Model.PorEtapa, ("Ofrecimientos", "serie-a", i => i.Ofrecimientos), ("Ventas", "serie-b", i => i.PorcentajeVentas))
+            with { Descripcion = "Ofrecimientos y ventas por etapa de formación" };
+
+        <section class="resumen" aria-label="Indicadores comerciales">
+            <div class="resumen-dato destacada" title="@CalculadoraGaia.Kpi("ofrecimientos").Ayuda">
+                <span class="resumen-icono">@Iconos.Svg("etiqueta")</span>
+                <span class="resumen-titulo">Ofrecimientos</span>
+                <span class="resumen-cifra" data-contar="@Formato.Crudo(t.Ofrecimientos)" data-formato="porcentaje">@Formato.Porcentaje(t.Ofrecimientos)</span>
+                <span class="resumen-variacion neutra">llamadas con intento de venta</span>
+            </div>
+            <div class="resumen-dato" title="El cliente pidió o planteó la oferta (posible venta entrante), sobre todas las llamadas">
+                <span class="resumen-icono">@Iconos.Svg("derecha")</span>
+                <span class="resumen-titulo">Reactivo</span>
+                <span class="resumen-cifra" data-contar="@Formato.Crudo(t.Reactivo)" data-formato="porcentaje">@Formato.Porcentaje(t.Reactivo)</span>
+                <span class="resumen-variacion neutra">@Formato.Entero(t.OfrecimientosReactivos) llamadas</span>
+            </div>
+            <div class="resumen-dato" title="La oferta la propuso el agente por su cuenta, sobre todas las llamadas">
+                <span class="resumen-icono">@Iconos.Svg("sube")</span>
+                <span class="resumen-titulo">Proactivo</span>
+                <span class="resumen-cifra" data-contar="@Formato.Crudo(t.Proactivo)" data-formato="porcentaje">@Formato.Porcentaje(t.Proactivo)</span>
+                <span class="resumen-variacion neutra">@Formato.Entero(t.OfrecimientosProactivos) llamadas</span>
+            </div>
+            <div class="resumen-dato" title="Ofertas alineadas con lo que necesitaba el cliente, sobre las que tienen el dato">
+                <span class="resumen-icono">@Iconos.Svg("diana")</span>
+                <span class="resumen-titulo">Alineados</span>
+                <span class="resumen-cifra" data-contar="@Formato.Crudo(alineados)" data-formato="porcentaje">@Formato.Porcentaje(alineados)</span>
+                <span class="resumen-variacion neutra">@Formato.Entero(t.OfrecimientosAlineados) alineados · @Formato.Entero(t.OfrecimientosNoAlineados) no</span>
+            </div>
+            <div class="resumen-dato" title="@CalculadoraGaia.Kpi("ventas").Ayuda">
+                <span class="resumen-icono">@Iconos.Svg("carrito")</span>
+                <span class="resumen-titulo">Ventas</span>
+                <span class="resumen-cifra" data-contar="@t.Ventas" data-formato="entero">@Formato.Entero(t.Ventas)</span>
+                <span class="resumen-variacion neutra">@Formato.Porcentaje(t.PorcentajeVentas) de las llamadas</span>
+            </div>
+        </section>
+
+        <div class="rejilla-2">
+            <section class="tarjeta">
+                <header class="tarjeta-cabecera">
+                    <h2>Resultado de la oferta</h2>
+                    <span class="tarjeta-nota">llamadas con intento de venta</span>
+                </header>
+                @await Html.PartialAsync("_RepartoGaia", (Model.ResultadosVenta, "tono-neutro", false))
+            </section>
+            <section class="tarjeta">
+                <header class="tarjeta-cabecera">
+                    <h2>Qué se ofrece</h2>
+                    <span class="tarjeta-nota">categoría de la oferta</span>
+                </header>
+                @await Html.PartialAsync("_RepartoGaia", (Model.CategoriasOferta, "relleno-proceso", true))
+            </section>
+        </div>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Qué se vende</h2>
+                <span class="tarjeta-nota">tipo de servicio, en las llamadas con venta</span>
+            </header>
+            @await Html.PartialAsync("_RepartoGaia", (Model.TiposServicioVenta, "tono-bueno", false))
+        </section>
+
+        <section class="tarjeta" data-vistas>
+            <header class="tarjeta-cabecera">
+                <h2>Ofrecimientos y ventas</h2>
+                <span class="tarjeta-nota">% sobre las llamadas de cada semana o día</span>
+                <partial name="_SelectorVistaGaia" />
+            </header>
+            <div data-vista="semana">@await Html.PartialAsync("_LineasGaia", OfrecimientosYVentas("semana", Model.PorSemana))</div>
+            <div data-vista="dia" hidden>@await Html.PartialAsync("_LineasGaia", OfrecimientosYVentas("dia", Model.PorDia))</div>
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Ofrecimientos y ventas por etapa</h2>
+                <span class="tarjeta-nota">de la preconexión al aseguramiento</span>
+            </header>
+            @await Html.PartialAsync("_ColumnasGaia", porEtapa)
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Agentes por ofrecimientos</h2>
+                <span class="tarjeta-nota">@Formato.Entero(Model.Agentes.Count) agentes, de más a menos ofrecimientos</span>
+            </header>
+            
+            <div class="tabla-contenedor alta">
+                <table class="ranking con-puesto tabla-comercial-gaia">
+                    <colgroup>
+                        <col style="width:24%" /><col style="width:8%" /><col style="width:11%" /><col style="width:10%" /><col style="width:10%" /><col style="width:10%" /><col style="width:9%" /><col style="width:9%" /><col style="width:9%" />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th scope="col"><span class="cab-columna">Agente</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Llamadas</span></th>
+                            <th scope="col" class="num" aria-sort="descending"><span class="cab-columna">Ofrecim.</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Proactivo</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Reactivo</span></th>
+                            <th scope="col" class="num" title="Ofertas alineadas, en número"><span class="cab-columna">Alineados</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Ventas</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Rellamada</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">No sol.</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var fila in Model.Agentes)
+                        {
+                            var i = fila.Indicadores;
+                            <tr>
+                                <td class="celda-nombre" title="@fila.Agente · @fila.Sector · oleada @fila.Oleada"><div class="nombre-fila"><span class="nombre-texto">@fila.Agente</span><span class="pastilla-dato" title="Oleada @fila.Oleada">@fila.Oleada</span></div></td>
+                                <td class="num barra-volumen" data-valor="@i.Llamadas">@Formato.Entero(i.Llamadas)</td>
+                                <td class="num">@Formato.Porcentaje(i.Ofrecimientos)</td>
+                                <td class="num">@Formato.Porcentaje(i.Proactivo)</td>
+                                <td class="num">@Formato.Porcentaje(i.Reactivo)</td>
+                                <td class="num">@Formato.Entero(i.OfrecimientosAlineados)</td>
+                                <td class="num">@Formato.Porcentaje(i.PorcentajeVentas)</td>
+                                <td class="num">@Formato.Porcentaje(i.Rellamada72)</td>
+                                <td class="num">@Formato.Porcentaje(i.NoSolucion)</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="total">
+                            <td>TOTAL</td>
+                            <td class="num">@Formato.Entero(t.Llamadas)</td>
+                            <td class="num">@Formato.Porcentaje(t.Ofrecimientos)</td>
+                            <td class="num">@Formato.Porcentaje(t.Proactivo)</td>
+                            <td class="num">@Formato.Porcentaje(t.Reactivo)</td>
+                            <td class="num">@Formato.Entero(t.OfrecimientosAlineados)</td>
+                            <td class="num">@Formato.Porcentaje(t.PorcentajeVentas)</td>
+                            <td class="num">@Formato.Porcentaje(t.Rellamada72)</td>
+                            <td class="num">@Formato.Porcentaje(t.NoSolucion)</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+    }
+}

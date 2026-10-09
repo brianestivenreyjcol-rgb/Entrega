@@ -1,0 +1,24 @@
+**/.pbi/localSettings.json
+**/.pbi/cache.abf
+# Visual Studio y compilación
+.vs/
+**/bin/
+**/obj/
+
+# Credenciales (plantilla en env.ejemplo)
+**/.env
+
+# Publicaciones
+publicacion/
+
+# Capturas con datos reales (nombres de auditores y agentes)
+capturas/
+
+# Ficheros de usuario de Visual Studio
+*.user
+
+# Caché de CDM No solución en desarrollo (unos 60 MB)
+**/App_Data/
+
+# Copia suelta de las hojas del portal SOLARIS (la buena está en la skill frontend-solaris)
+docs/referencia-portal/

@@ -1,0 +1,148 @@
+@model PaginaEquiposNoSolucion
+@* Equipos: ranking por % de no solución de supervisores, TL o agentes, con buscador, orden por columna
+   (en el servidor, para que el CSV salga igual que la tabla), desvío frente a la media, aviso de
+   cobertura desigual y la tabla en CSV. *@
+@{
+    Layout = "_InformeNoSolucion";
+}
+@if (Model.Datos is { } e)
+{
+    var r = e.Equipos;
+    var plural = PaginaEquiposNoSolucion.Plural(e.Nivel);
+    <section class="tarjeta">
+        <header class="tarjeta-cabecera">
+            <h2>Quién cierra peor</h2>
+            <div class="cabecera-acciones-ns">
+                <div class="pestanas-vista" role="group" aria-label="Nivel de equipo">
+                    @foreach (var (valor, texto) in PaginaEquiposNoSolucion.Niveles)
+                    {
+                        <a class="segmento@(valor == e.Nivel ? " activo" : "")" href="@Model.UrlNivel(valor)" data-parcial
+                           aria-current="@(valor == e.Nivel ? "true" : null)">@texto</a>
+                    }
+                </div>
+                @if (e.Filas.Count > 0)
+                {
+                    <a class="boton-secundario pequeno" href="@Model.UrlCsvTabla" title="Esta tabla, tal y como se ve, en CSV para Excel">@Iconos.Svg("hoja") CSV</a>
+                }
+            </div>
+        </header>
+        <p class="nota-ns">
+            Ordenado por <b>% de no solución</b> sobre encuestas entrantes. Entran los @plural con al menos
+            <b>@r.Suelo encuestas</b> (el suelo del informe, @r.SueloBase90d a 90 días, prorrateado al rango); quedan fuera
+            <b>@r.Fuera</b> de @r.Total. El desvío compara con la media, <b>@FormatoNoSolucion.Pct(r.Media)</b>.
+        </p>
+
+        <form method="get" action="@PaginaNoSolucion.Ruta(Model.Pestana)" class="buscar-ns" role="search" data-parcial>
+            @foreach (var p in Model.Filtros?.Parametros() ?? [])
+            {
+                <input type="hidden" name="@p.Key" value="@p.Value" />
+            }
+            <input type="hidden" name="nivel" value="@e.Nivel" />
+            @if (e.Orden != "pct")
+            {
+                <input type="hidden" name="orden" value="@e.Orden" />
+            }
+            @if (e.Direccion != (e.Orden == "nombre" ? "asc" : "desc"))
+            {
+                <input type="hidden" name="dir" value="@e.Direccion" />
+            }
+            <span class="buscar-ns-campo">
+                @Iconos.Svg("buscar")
+                <input type="search" name="q" value="@e.Busca" aria-label="Buscar en la tabla"
+                       placeholder="@(e.Nivel == "agente" ? "Buscar agente, TL o supervisor" : "Buscar nombre")" />
+            </span>
+            <button type="submit" class="boton-aplicar">Buscar</button>
+            @if (e.Busca.Length > 0)
+            {
+                <a class="enlace" href="@Model.UrlAqui(Model.ParametrosPropios.Where(p => p.Key != "q"))" data-parcial>Quitar búsqueda</a>
+            }
+        </form>
+
+        @if (e.Filas.Count > 0)
+        {
+            <div class="tabla-contenedor alta">
+                <table class="ranking tabla-equipos-ns">
+                    <colgroup>
+                        <col style="width:34%" /><col style="width:10%" /><col style="width:11%" /><col style="width:10%" />
+                        <col style="width:9%" /><col style="width:16%" /><col style="width:10%" />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            @foreach (var (clave, texto, izquierda) in PaginaEquiposNoSolucion.Columnas)
+                            {
+                                var ordenada = e.Orden == clave;
+                                <th scope="col" class="@(izquierda ? null : "num")"
+                                    aria-sort="@(ordenada ? (e.Direccion == "desc" ? "descending" : "ascending") : null)">
+                                    <a class="ordenar" href="@Model.UrlOrden(clave)" data-parcial>@texto</a>
+                                </th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var x in e.Filas)
+                        {
+                            var f = x.Fila;
+                            <tr>
+                                <td title="@f.Nombre · @x.Detalle"><span class="puesto-ns">@x.Puesto</span>@f.Nombre</td>
+                                <td class="num barra-volumen" data-valor="@f.Llamadas">@FormatoNoSolucion.Int(f.Llamadas)</td>
+                                <td class="num">@FormatoNoSolucion.Int(f.Encuestadas)</td>
+                                <td class="num texto-suave">@FormatoNoSolucion.Pct(f.Cobertura)</td>
+                                <td class="num">@FormatoNoSolucion.Int(f.Nosol)</td>
+                                <td class="num">
+                                    <span class="pct-barra-ns">
+                                        <span>@FormatoNoSolucion.Pct(f.Pct)</span>
+                                        <span class="hbarra-media-pista" aria-hidden="true"><span class="hbarra-media-relleno tono-@(x.Tono ?? "neutro")" style="width:@(Formato.Coord(100 * (f.Pct ?? 0) / e.MaxPct))%"></span></span>
+                                    </span>
+                                </td>
+                                <td class="num desvio-ns tono-texto-@(x.Tono ?? "neutro")">@FormatoNoSolucion.Pp(f.Desvio)</td>
+                            </tr>
+                        }
+                    </tbody>
+                    @* Total al pie (nunca arriba): la suma de las filas que se ven, con su % y su cobertura. *@
+                    <tfoot>
+                        @{
+                            var totLlamadas = e.Filas.Sum(x => x.Fila.Llamadas);
+                            var totEncuestadas = e.Filas.Sum(x => x.Fila.Encuestadas);
+                            var totNosol = e.Filas.Sum(x => x.Fila.Nosol);
+                        }
+                        <tr class="total">
+                            <td>TOTAL</td>
+                            <td class="num">@FormatoNoSolucion.Int(totLlamadas)</td>
+                            <td class="num">@FormatoNoSolucion.Int(totEncuestadas)</td>
+                            <td class="num">@FormatoNoSolucion.Pct(totLlamadas == 0 ? null : 100.0 * totEncuestadas / totLlamadas)</td>
+                            <td class="num">@FormatoNoSolucion.Int(totNosol)</td>
+                            <td class="num">@FormatoNoSolucion.Pct(totEncuestadas == 0 ? null : 100.0 * totNosol / totEncuestadas)</td>
+                            <td class="num"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        }
+        else
+        {
+            <p class="vacio">
+                @if (e.Busca.Length > 0)
+                {
+                    @:Nada coincide con «@e.Busca».
+                }
+                else
+                {
+                    var nombreNivel = PaginaEquiposNoSolucion.Niveles.First(n => n.Valor == e.Nivel).Texto.ToLowerInvariant();
+                    @:Ningún @nombreNivel llega a @r.Suelo encuestas con estos filtros. Prueba con un rango más ancho.
+                }
+            </p>
+        }
+
+        @if (r.Cobertura is { } c && c.P90 - c.P10 > 8)
+        {
+            <div class="aviso" role="note">
+                @Iconos.Svg("alerta")
+                <span>
+                    <b>La cobertura de encuesta no es igual para todos</b>: va de @FormatoNoSolucion.Pct(c.P10) a
+                    @FormatoNoSolucion.Pct(c.P90) entre el 10 % que menos y el que más recoge. Entre dos @plural con
+                    coberturas muy distintas, el porcentaje mide en parte a quién se encuesta más.
+                </span>
+            </div>
+        }
+    </section>
+}

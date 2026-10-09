@@ -1,0 +1,25 @@
+@model BarrasNs
+@* Barras horizontales con la pieza de la guía (.hbarras > .hbarra, como «por sector» de Auditorías):
+   a la izquierda el nombre y su detalle, la barra con su etiqueta y, a la derecha, la nota. El largo es
+   el valor frente al mayor (--fraccion, sobre el hueco que deja la etiqueta: lo pone site.css) y el color
+   sale de la clase de tono (--relleno). La barra crece al aparecer (scaleX). *@
+@{
+    var maximo = Math.Max(1e-9, Model.Barras.Select(b => b.Valor).DefaultIfEmpty(0).Max());
+}
+<div class="hbarras libre">
+    @foreach (var b in Model.Barras)
+    {
+        var fraccion = Formato.Coord(Math.Max(0.006, b.Valor / maximo));
+        <div class="hbarra" title="@b.Nombre · @b.Etiqueta@(b.Nota is null ? "" : " · " + b.Nota)">
+            <span class="hbarra-nombre">
+                <span>@b.Nombre</span>
+                @if (b.Sub is not null)
+                {
+                    <span class="sub-ns">@b.Sub</span>
+                }
+            </span>
+            <span class="hbarra-pista"><span class="hbarra-relleno @b.Clase" style="--fraccion:@fraccion"></span><span class="hbarra-valor">@b.Etiqueta</span></span>
+            <span class="hbarra-media-valor">@b.Nota</span>
+        </div>
+    }
+</div>

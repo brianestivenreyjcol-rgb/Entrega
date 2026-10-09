@@ -1,0 +1,255 @@
+@model PaginaMotivosGaia
+@* Motivo de contacto (como la pestaña del mismo nombre del portal SOLARIS; capturas motivo-1, motivo-2 y motivo-3): cuatro
+   indicadores frente al histórico (los mismos filtros sin fechas) con su barra, burbujas rellamada–TMO por agente, sentimiento del
+   cliente al empezar y al terminar, rellamada 72 h por rol operativo, obstáculos de solución, mapa de calor motivo 3 × semana y
+   clientes que más vuelven. El árbol de motivos y el mapa de afectación de antes los sustituye el ranking tipológico de
+   «Ranking y Estilo». *@
+@{
+    Layout = "_InformeGaia";
+}
+@if (!Model.Preparando)
+{
+    var t = Model.Total!;
+    var f = Model.Filtros!;
+    var h = Model.Historico;
+    var rango = Formato.Fecha(f.Desde) + " – " + Formato.Fecha(f.Hasta);
+    if (t.Llamadas == 0)
+    {
+        <p class="vacio">Ninguna llamada cumple estos filtros.</p>
+    }
+    else
+    {
+        // «histórico X · mejor / peor / igual»: en las tres medidas, más bajo es mejor
+        (string Veredicto, string Tono) Frente(double? actual, double? historico, int decimales)
+        {
+            if (actual is not { } a || historico is not { } b) return ("", "tono-neutro");
+            var d = Math.Round(a, decimales) - Math.Round(b, decimales);
+            return d < 0 ? ("mejor", "tono-bueno") : d > 0 ? ("peor", "tono-critico") : ("igual", "tono-neutro");
+        }
+        var tmo = Frente(t.Tmo, h?.Tmo, 2);
+        var problemas = Frente(t.ProblemasNoResueltos, h?.ProblemasNoResueltos, 4);
+        var rellamada = Frente(t.Rellamada72, h?.Rellamada72, 4);
+        string Barra(double? v, double? historico) => v is not { } x ? "0" : Formato.Coord(Math.Clamp(historico is { } y && y > x ? x / y : 1, 0, 1) * 100);
+        var fraccionLlamadas = h is { Llamadas: > 0 } ? Math.Clamp((double)t.Llamadas / h.Llamadas, 0, 1) : 1;
+        var roles = PaginaMotivosGaia.Roles;
+        var rolActual = roles.First(r => r.Clave == Model.Rol);
+        var maxBase = Math.Max(1, Model.RellamadaPorRol.Select(r => r.Base).DefaultIfEmpty(1).Max());
+
+        <section class="resumen en-4" aria-label="Indicadores del motivo de contacto">
+            <div class="resumen-dato sin-icono con-barra">
+                <span class="resumen-titulo">Llamadas</span>
+                <span class="resumen-cifra" data-contar="@t.Llamadas" data-formato="entero">@Formato.Entero(t.Llamadas)</span>
+                <span class="resumen-nota">@rango</span>
+                <span class="resumen-barra"><span style="width:@(Formato.Coord(fraccionLlamadas * 100))%"></span></span>
+            </div>
+            <div class="resumen-dato sin-icono con-barra" title="Duración media de las llamadas. Más bajo es mejor.">
+                <span class="resumen-titulo">TMO</span>
+                <span class="resumen-cifra">@(t.Tmo is { } m ? Formato.Decimal2(m) + " s" : "—")</span>
+                <span class="resumen-nota">histórico @(h?.Tmo is { } mh ? Formato.Decimal2(mh) + " s" : "—") · <b class="@(tmo.Veredicto == "mejor" ? "mejor" : tmo.Veredicto == "peor" ? "peor" : null)">@tmo.Veredicto</b></span>
+                <span class="resumen-barra @tmo.Tono"><span style="width:@(Barra(t.Tmo, h?.Tmo))%"></span></span>
+            </div>
+            <div class="resumen-dato sin-icono con-barra" title="Llamadas con un problema que no se resolvió. Más bajo es mejor.">
+                <span class="resumen-titulo">% Problemas no resueltos</span>
+                <span class="resumen-cifra" data-contar="@Formato.Crudo(t.ProblemasNoResueltos)" data-formato="porcentaje">@Formato.Porcentaje(t.ProblemasNoResueltos)</span>
+                <span class="resumen-nota">histórico @Formato.Porcentaje(h?.ProblemasNoResueltos) · <b class="@(problemas.Veredicto == "mejor" ? "mejor" : problemas.Veredicto == "peor" ? "peor" : null)">@problemas.Veredicto</b></span>
+                <span class="resumen-barra @problemas.Tono"><span style="width:@(Formato.Coord(Math.Clamp(t.ProblemasNoResueltos ?? 0, 0, 1) * 100))%"></span></span>
+            </div>
+            <div class="resumen-dato sin-icono con-barra" title="@CalculadoraGaia.Kpi("rellamada").Ayuda Más bajo es mejor.">
+                <span class="resumen-titulo">% Rellamada</span>
+                <span class="resumen-cifra" data-contar="@Formato.Crudo(t.Rellamada72)" data-formato="porcentaje">@Formato.Porcentaje(t.Rellamada72)</span>
+                <span class="resumen-nota">histórico @Formato.Porcentaje(h?.Rellamada72) · <b class="@(rellamada.Veredicto == "mejor" ? "mejor" : rellamada.Veredicto == "peor" ? "peor" : null)">@rellamada.Veredicto</b></span>
+                <span class="resumen-barra @rellamada.Tono"><span style="width:@(Formato.Coord(Math.Clamp(t.Rellamada72 ?? 0, 0, 1) * 100))%"></span></span>
+            </div>
+        </section>
+
+        <div class="rejilla-2">
+            <section class="tarjeta">
+                <header class="tarjeta-cabecera">
+                    <h2>Rellamada – TMO por agente</h2>
+                    <span class="tarjeta-nota">Cada burbuja es un agente con @PaginaMotivosGaia.MinBurbuja llamadas o más (tamaño = llamadas); abajo a la izquierda, menos TMO y menos rellamada</span>
+                </header>
+                @await Html.PartialAsync("_BurbujasGaia", Model.Burbujas)
+            </section>
+            <section class="tarjeta">
+                <header class="tarjeta-cabecera">
+                    <h2>Sentimiento del cliente</h2>
+                    <span class="tarjeta-nota">Llamadas por sentimiento al empezar (gris) y al terminar (color de la marca)</span>
+                </header>
+                @if (Model.Sentimiento.Count == 0)
+                {
+                    <p class="vacio corto">Sin datos de sentimiento con estos filtros.</p>
+                }
+                else
+                {
+                    <div class="sentimientos">
+                        @foreach (var s in Model.Sentimiento)
+                        {
+                            <div class="sentimiento">
+                                <p class="sentimiento-nombre">@s.Texto</p>
+                                <div class="sentimiento-fila">
+                                    <span>Inicial</span>
+                                    <span class="sentimiento-pista sentimiento-inicial"><span style="width:@(Formato.Coord(s.FraccionInicial * 100))%"></span></span>
+                                    <span class="sentimiento-cifra"><b>@Formato.Entero(s.Inicial)</b> @Formato.Porcentaje(s.FraccionInicial)</span>
+                                </div>
+                                <div class="sentimiento-fila">
+                                    <span>Final</span>
+                                    <span class="sentimiento-pista"><span style="width:@(Formato.Coord(s.FraccionFinal * 100))%"></span></span>
+                                    <span class="sentimiento-cifra"><b>@Formato.Entero(s.Final)</b> @Formato.Porcentaje(s.FraccionFinal)</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </section>
+        </div>
+
+        <div class="rejilla-2">
+            <section class="tarjeta">
+                <header class="tarjeta-cabecera">
+                    <h2>Rellamada 72 h por rol operativo</h2>
+                    <span class="tarjeta-nota">Rellamadas (rojo) sobre las llamadas con el dato (pista verde), por @rolActual.Texto.ToLowerInvariant(); los 20 con más rellamadas</span>
+                    <div class="barra-tarjeta">
+                        <div class="pestanas-vista" role="group" aria-label="Rol operativo">
+                            @foreach (var (clave, texto) in roles)
+                            {
+                                <a class="segmento@(clave == Model.Rol ? " activo" : "")" href="@Model.UrlRol(clave)" data-parcial
+                                   aria-current="@(clave == Model.Rol ? "true" : null)">@texto</a>
+                            }
+                        </div>
+                    </div>
+                </header>
+                @if (Model.RellamadaPorRol.Count == 0)
+                {
+                    <p class="vacio corto">Sin rellamadas con estos filtros.</p>
+                }
+                else
+                {
+                    <div class="roles">
+                        @foreach (var r in Model.RellamadaPorRol)
+                        {
+                            <div class="rol-fila" title="@r.Texto · @Formato.Entero(r.Rellamadas) rellamadas de @Formato.Entero(r.Base) llamadas con el dato@(r.Fraccion is { } fr ? " · " + Formato.Porcentaje(fr) : "")">
+                                <span class="rol-nombre">@r.Texto</span>
+                                <span class="rol-pista">
+                                    <span class="rol-base" style="width:@(Formato.Coord(100.0 * r.Base / maxBase))%"></span>
+                                    <span class="rol-rellamadas" style="width:@(Formato.Coord(100.0 * r.Rellamadas / maxBase))%"></span>
+                                </span>
+                                <span class="rol-cifra"><b>@Formato.Entero(r.Rellamadas)</b> de @Formato.Entero(r.Base)</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </section>
+            <section class="tarjeta">
+                <header class="tarjeta-cabecera">
+                    <h2>Obstáculos de solución</h2>
+                    <span class="tarjeta-nota">Lo que DataOrb detecta que impidió resolver, contado una vez por llamada aunque vengan varios</span>
+                </header>
+                @await Html.PartialAsync("_RepartoGaia", (Model.Obstaculos, "relleno-marca", true))
+            </section>
+        </div>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Tema de contacto</h2>
+                <span class="tarjeta-nota">Conversaciones por Motivo 3 y semana ISO; los @(Model.Tema?.Filas.Count ?? 0) motivos con más volumen · cuanto más intenso, más conversaciones</span>
+            </header>
+            @if (Model.Tema is { Filas.Count: > 0 } tema)
+            {
+                <div class="tabla-contenedor alta">
+                    <table class="ranking tabla-calor">
+                        <colgroup><col style="width:240px" /></colgroup>
+                        <thead>
+                            <tr>
+                                <th scope="col"><span class="cab-columna">Motivo 3</span></th>
+                                @foreach (var semana in tema.Semanas)
+                                {
+                                    <th scope="col" class="num" title="@semana.Clave"><span class="cab-columna">@semana.Texto</span></th>
+                                }
+                                <th scope="col" class="num"><span class="cab-columna">Total</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var fila in tema.Filas)
+                            {
+                                <tr>
+                                    <td class="celda-nombre" title="@MotivoDe(fila.Motivo)"><div class="nombre-fila"><span class="nombre-texto">@MotivoDe(fila.Motivo)</span></div></td>
+                                    @foreach (var valor in fila.Valores)
+                                    {
+                                        <td class="num calor" style="--i:@Formato.Coord(tema.Maximo == 0 ? 0 : (double)valor / tema.Maximo)">@Formato.Entero(valor)</td>
+                                    }
+                                    <td class="num total-fila">@Formato.Entero(fila.Total)</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr class="total">
+                                <td>TOTAL</td>
+                                @foreach (var total in tema.TotalesSemana)
+                                {
+                                    <td class="num">@Formato.Entero(total)</td>
+                                }
+                                <td class="num">@Formato.Entero(tema.Total)</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <p class="vacio corto">Ninguna llamada de estos filtros trae motivo 3.</p>
+            }
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Clientes que más vuelven</h2>
+                <span class="tarjeta-nota">Clientes con 3 llamadas o más en la selección, por número de rellamadas · pulsa una cabecera para ordenar</span>
+            </header>
+            @if (Model.Clientes.Count > 0)
+            {
+                <div class="tabla-contenedor alta">
+                    <table class="ranking tabla-clientes">
+                        <colgroup><col style="width:22%" /><col style="width:11%" /><col style="width:12%" /><col style="width:12%" /><col style="width:25%" /><col style="width:18%" /></colgroup>
+                        <thead>
+                            <tr>
+                                <th scope="col"><button type="button" class="ordenar">Cliente</button></th>
+                                <th scope="col" class="num"><button type="button" class="ordenar">Llamadas</button></th>
+                                <th scope="col" class="num"><button type="button" class="ordenar">Rellamadas</button></th>
+                                <th scope="col" class="num"><button type="button" class="ordenar">% Rellamada</button></th>
+                                <th scope="col"><button type="button" class="ordenar">Motivo 2 más frecuente</button></th>
+                                <th scope="col" class="num"><button type="button" class="ordenar">Última llamada</button></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var c in Model.Clientes)
+                            {
+                                <tr>
+                                    <td title="@c.IdCliente">@c.IdCliente</td>
+                                    <td class="num" data-valor="@c.Llamadas">@Formato.Entero(c.Llamadas)</td>
+                                    <td class="num" data-valor="@c.Rellamadas">@Formato.Entero(c.Rellamadas)</td>
+                                    <td class="num" data-valor="@Formato.Crudo(c.PorcentajeRellamada)">@Formato.Porcentaje(c.PorcentajeRellamada)</td>
+                                    <td title="@MotivoDe(c.Motivo2)">@MotivoDe(c.Motivo2)</td>
+                                    <td class="num" data-valor="@c.UltimaLlamada.ToString("yyyyMMddHHmm")">@c.UltimaLlamada.ToString("dd/MM/yyyy HH:mm")</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr class="total">
+                                <td>TOTAL</td>
+                                <td class="num">@Formato.Entero(Model.Clientes.Sum(c => c.Llamadas))</td>
+                                <td class="num">@Formato.Entero(Model.Clientes.Sum(c => c.Rellamadas))</td>
+                                <td class="num"></td>
+                                <td></td>
+                                <td class="num"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <p class="vacio corto">Ningún cliente tiene 3 llamadas o más con estos filtros.</p>
+            }
+        </section>
+    }
+}

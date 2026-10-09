@@ -1,0 +1,114 @@
+@model TableroModelo
+@* El cuerpo de una página del informe: pestañas, panel de filtros y contenido. site.js lo pide
+   con la cabecera X-Parcial al cambiar un filtro y sustituye #informe. *@
+@{
+    var f = Model.Filtros;
+    var url = "/" + Model.Pagina.Clave;
+    (Vista Vista, string Texto)[] vistas = [(Vista.Dia, "Día"), (Vista.Semana, "Semana"), (Vista.Mes, "Mes")];
+    (string Clave, string Texto)[] paginas = [(PaginaTablero.ClaveGeneral, "General"), (PaginaTablero.ClaveFormacion, "Formación & Calidad"), (PaginaTablero.ClaveT0, "T0 y planes de acción")];
+    var porVista = Model.Vista switch { Vista.Dia => "día", Vista.Semana => "semana", _ => "mes" };
+}
+<div id="informe" data-titulo="@Model.Pagina.Titulo · CDM Auditorías Calidad" data-miga="@Model.Pagina.Titulo">
+    <nav class="pestanas" aria-label="Páginas del informe">
+        @foreach (var (clave, texto) in paginas)
+        {
+            <a class="pestana@(clave == Model.Pagina.Clave ? " activa" : "")" href="/@clave@(f.SoloFechas().Consulta())"
+               aria-current="@(clave == Model.Pagina.Clave ? "page" : null)">@texto</a>
+        }
+        <div class="pestanas-vista" role="group" aria-label="Agrupar las gráficas por">
+            <span class="pestanas-etiqueta">Agrupar por</span>
+            @foreach (var (vista, texto) in vistas)
+            {
+                <a class="segmento@(vista == Model.Vista ? " activo" : "")" href="@(url + f.ConVista(vista).Consulta())" data-parcial
+                   aria-current="@(vista == Model.Vista ? "true" : null)">@texto</a>
+            }
+        </div>
+    </nav>
+
+    <div class="contenedor">
+    <partial name="_ErrorDatos" model="Model" />
+
+    <div class="tablero">
+        <partial name="_PanelFiltros" model="Model" />
+
+        <main class="contenido">
+            <section class="resumen" aria-label="Indicadores">
+                @foreach (var t in Model.Tarjetas)
+                {
+                    var (clase, icono) = t.Variacion switch
+                    {
+                        null => ("neutra", "igual"),
+                        >= 0 => ("sube", "sube"),
+                        _ => ("baja", "baja"),
+                    };
+                    <div class="resumen-dato@(t.Destacada ? " destacada" : "")" title="@t.Ayuda">
+                        <span class="resumen-icono">@Iconos.Svg(t.Icono)</span>
+                        <span class="resumen-titulo">@t.Titulo</span>
+                        <span class="resumen-cifra" data-contar="@Formato.Crudo(t.Numero)" data-formato="@(t.EsPorcentaje ? "porcentaje" : "entero")">@t.Valor</span>
+                        @if (t.Progreso is { } progreso)
+                        {
+                            <span class="resumen-cobertura">
+                                <span class="resumen-cobertura-pista" role="progressbar" aria-label="@t.Titulo"
+                                      aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Formato.Coord(progreso * 100)">
+                                    <span class="resumen-cobertura-relleno" style="width:@(Formato.Coord(Math.Clamp(progreso, 0, 1) * 100))%"></span>
+                                </span>
+                                <span class="resumen-cobertura-texto">@t.TextoVariacion</span>
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="resumen-variacion @clase">
+                                @if (t.Variacion is not null)
+                                {
+                                    @Iconos.Tendencia(icono)
+                                }
+                                @t.TextoVariacion
+                            </span>
+                        }
+                    </div>
+                }
+            </section>
+
+            @if (Model.T0 is not null)
+            {
+                <partial name="_ContenidoT0" model="Model" />
+            }
+            else
+            {
+            @* Las dos gráficas por tiempo, a todo el ancho: así cada columna y cada punto cabe con su valor en una pastilla. *@
+            <section class="tarjeta crono-tarjeta">
+                <header class="tarjeta-cabecera">
+                    <h2>Evolución de auditorías</h2>
+                    <span class="tarjeta-nota">Total por @porVista</span>
+                </header>
+                <partial name="Graficos/_Columnas" model="Model" />
+            </section>
+            <section class="tarjeta crono-tarjeta">
+                <header class="tarjeta-cabecera">
+                    <h2>Nota promedio de calidad</h2>
+                    <span class="tarjeta-nota">Media por @porVista</span>
+                </header>
+                <partial name="Graficos/_Linea" model="Model" />
+            </section>
+
+            <div class="rejilla-2">
+                <section class="tarjeta">
+                    <header class="tarjeta-cabecera">
+                        <h2>Total auditorías y nota promedio por sector</h2>
+                        <span class="tarjeta-nota">Pulsa un sector para filtrar</span>
+                    </header>
+                    <partial name="Graficos/_Sectores" model="Model" />
+                </section>
+                <section class="tarjeta">
+                    <header class="tarjeta-cabecera">
+                        <h2>Top 10 auditores</h2>
+                        <span class="tarjeta-nota">Pulsa un auditor para filtrar · los de menos de 20 auditorías van al final · el total es el de todo el filtro</span>
+                    </header>
+                    <partial name="Graficos/_TopAuditores" model="Model" />
+                </section>
+            </div>
+            }
+        </main>
+    </div>
+    </div>
+</div>

@@ -1,0 +1,96 @@
+@model PaginaGaia
+@* #informe de GAIA Formación: pestañas, avisos, panel de filtros y la pestaña. Al filtrar, site.js lo pide
+   con la cabecera X-Parcial y el controlador lo devuelve sin la página alrededor; data-marca-pagina lleva la marca de color
+   para que site.js la copie a <html> (si no, el color se quedaría con el de la marca anterior). Mientras no hay datos,
+   «preparando», y la página se vuelve a pedir sola cada 10 s (salvo que el último intento fallara y no
+   se esté reintentando: entonces se enseña el error y un botón). *@
+@{
+    Layout = ViewData["Parcial"] is true ? null : "_LayoutGaia";
+    var f = Model.Filtros;
+    var volver = Context.Request.Path + Context.Request.QueryString;
+    var enCurso = Model.Cargando || Model.Actualizacion == "en-curso";
+}
+<div id="informe" data-miga="@PaginaGaia.Titulo(Model.Pestana)" data-marca-pagina="@MarcaDePagina(Model.Filtros?.Peticion.Marca)" data-titulo="GAIA Formación · @PaginaGaia.Titulo(Model.Pestana) · CDM Auditorías Calidad">
+    <nav class="pestanas compactas" aria-label="Pestañas de GAIA Formación">
+        @foreach (var p in Enum.GetValues<PestanaGaia>())
+        {
+            <a class="pestana@(p == Model.Pestana ? " activa" : "")" href="@Model.UrlPestana(p)" data-parcial
+               aria-current="@(p == Model.Pestana ? "page" : null)">@PaginaGaia.Titulo(p)</a>
+        }
+        <span class="estado-ns" aria-live="polite">
+            @if (f is not null)
+            {
+                @Iconos.Svg("reloj")
+                <span>Llamadas del <b>@Formato.Fecha(f.DiaMin)</b> al <b>@Formato.Fecha(f.DiaMax)</b></span>
+            }
+        </span>
+    </nav>
+
+    <div class="contenedor">
+    @if (Model.Actualizacion == "en-curso")
+    {
+        <div class="aviso aviso-info" role="status">@Iconos.Svg("refrescar") <span>Leyendo el Excel de nómina y trayendo las llamadas de BigQuery. Tarda alrededor de un minuto; mientras tanto se sigue viendo lo de antes. Vuelve a cargar la página cuando termine.</span></div>
+    }
+    else if (Model.Actualizacion == "ya-en-curso")
+    {
+        <div class="aviso aviso-info" role="status">@Iconos.Svg("reloj") <span>Ya hay una descarga en curso o acaba de terminar una: espera un poco antes de volver a pedirla.</span></div>
+    }
+
+    @if (Model.Preparando)
+    {
+        IgnoreBody();
+        var fallo = !Model.Cargando && !string.IsNullOrEmpty(Model.Error);
+        <div class="preparando-ns" data-recargar-en="@(fallo ? null : "10")" aria-live="polite">
+            @if (!fallo)
+            {
+                <div class="girando" aria-hidden="true"></div>
+                <h2>Preparando los datos</h2>
+                <p>Se está leyendo el Excel de nómina y trayendo de BigQuery las llamadas de los agentes en formación. Tarda alrededor de un minuto; después queda guardado y entra al instante. Esta página se vuelve a cargar sola.</p>
+                @if (!string.IsNullOrEmpty(Model.Error))
+                {
+                    <p class="texto-tenue">El último intento falló: @Model.Error</p>
+                }
+            }
+            else
+            {
+                <h2>No se han podido traer los datos</h2>
+                <p>@Model.Error</p>
+                <form method="post" action="@(PaginaGaia.RutaBase)/actualizar">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="volver" value="@volver" />
+                    <button type="submit" class="boton-aplicar" disabled="@enCurso">Volver a intentarlo</button>
+                </form>
+            }
+        </div>
+    }
+    else
+    {
+        @if (!string.IsNullOrEmpty(Model.Error))
+        {
+            <div class="aviso" role="alert">@Iconos.Svg("alerta") <span>El último intento de actualizar falló y se sigue viendo la última versión guardada. <small>@Model.Error</small></span></div>
+        }
+        @foreach (var aviso in Model.AvisosCarga)
+        {
+            <div class="aviso" role="alert">@Iconos.Svg("alerta") <span>@aviso</span></div>
+        }
+        @if (Model.AvisosExcel.Count > 0)
+        {
+            <details class="aviso-plegable">
+                <summary>@Iconos.Svg("alerta") <span>El Excel de nómina tiene @Model.AvisosExcel.Count @(Model.AvisosExcel.Count == 1 ? "aviso" : "avisos")</span>@Iconos.Svg("abajo", "chevron")</summary>
+                <ul class="lista-ns">
+                    @foreach (var aviso in Model.AvisosExcel)
+                    {
+                        <li>@aviso</li>
+                    }
+                </ul>
+            </details>
+        }
+        <div class="tablero">
+            <partial name="_PanelGaia" model="Model" />
+            <main class="contenido">
+                @RenderBody()
+            </main>
+        </div>
+    }
+    </div>
+</div>

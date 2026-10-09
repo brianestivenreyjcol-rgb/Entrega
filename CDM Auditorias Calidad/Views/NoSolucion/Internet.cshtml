@@ -1,0 +1,394 @@
+@model PaginaInternetNoSolucion
+@* Sin acceso a internet: indicadores, cuadrantes atención/proceso, impedimentos (cada uno se despliega
+   con su reparto por marca y servicio, sus llamadas de ejemplo y su exportación, solo de
+   sinAccesoInternet), la rúbrica ítem a ítem y las averías N4 › N5. *@
+@{
+    Layout = "_InformeNoSolucion";
+    double Parte(long a, long b) => b == 0 ? double.NaN : 100.0 * a / b;
+}
+@if (Model.Datos is { } datos)
+{
+    var r = datos.Internet;
+    var t = r.Totales;
+    if (t.Llamadas == 0)
+    {
+        <p class="vacio">No hay llamadas de sinAccesoInternet con estos filtros.</p>
+    }
+    else
+    {
+        <section class="resumen" aria-label="Indicadores de sinAccesoInternet">
+            <div class="resumen-dato destacada">
+                <span class="resumen-icono">@Iconos.Svg("alerta")</span>
+                <span class="resumen-titulo">No solución</span>
+                <span class="resumen-cifra" data-contar="@Formato.Crudo(t.Pct / 100)" data-formato="porcentaje">@FormatoNoSolucion.Pct(t.Pct)</span>
+                <span class="resumen-variacion neutra">de @FormatoNoSolucion.Int(t.Encuestadas) encuestadas aquí</span>
+            </div>
+            <div class="resumen-dato">
+                <span class="resumen-icono">@Iconos.Svg("telefono")</span>
+                <span class="resumen-titulo">Llamadas</span>
+                <span class="resumen-cifra" data-contar="@t.Llamadas" data-formato="entero">@FormatoNoSolucion.Int(t.Llamadas)</span>
+                <span class="resumen-variacion neutra">@FormatoNoSolucion.Pct(Parte(t.Encuestadas, t.Llamadas)) con encuesta</span>
+            </div>
+            <div class="resumen-dato">
+                <span class="resumen-icono">@Iconos.Svg("portapapeles")</span>
+                <span class="resumen-titulo">Con ticket técnico</span>
+                <span class="resumen-cifra" data-contar="@t.ConTicket" data-formato="entero">@FormatoNoSolucion.Int(t.ConTicket)</span>
+                <span class="resumen-variacion neutra">@FormatoNoSolucion.Pct(Parte(t.ConTicket, t.Llamadas)) de las llamadas</span>
+            </div>
+            <div class="resumen-dato">
+                <span class="resumen-icono">@Iconos.Svg("sube")</span>
+                <span class="resumen-titulo">Escaladas a backoffice</span>
+                <span class="resumen-cifra" data-contar="@t.EscaladasBo" data-formato="entero">@FormatoNoSolucion.Int(t.EscaladasBo)</span>
+                <span class="resumen-variacion neutra">@FormatoNoSolucion.Pct(Parte(t.EscaladasBo, t.Llamadas)) de las llamadas</span>
+            </div>
+            <div class="resumen-dato">
+                <span class="resumen-icono">@Iconos.Svg("refrescar")</span>
+                <span class="resumen-titulo">Rellamada en 72 h</span>
+                <span class="resumen-cifra" data-contar="@t.Rellamada72h" data-formato="entero">@FormatoNoSolucion.Int(t.Rellamada72h)</span>
+                <span class="resumen-variacion neutra">@FormatoNoSolucion.Pct(Parte(t.Rellamada72h, t.Llamadas)) volvieron a llamar</span>
+            </div>
+        </section>
+
+        @if (r.Causas is { } causas && r.CuadreImpedimentos is { } cuadre)
+        {
+            var nosolCausas = Math.Max(1, cuadre.Nosol);
+            long N(string clave) => causas.First(c => c.Clave == clave).Nosol;
+            var maxCausa = Math.Max(1, causas.Max(c => c.Nosol));
+            <section class="tarjeta">
+                <header class="tarjeta-cabecera">
+                    <h2>¿Es de la atención o del proceso?</h2>
+                    @if (cuadre.Nosol > 0)
+                    {
+                        <a class="boton-secundario pequeno" href="@Model.UrlCsvCausas()" title="Cada llamada no solucionada con su causa y las señales que la deciden, en CSV para Excel">@Iconos.Svg("hoja") Cada llamada con su causa (CSV)</a>
+                    }
+                </header>
+                <p class="nota-ns">
+                    Cada una de las <b>@FormatoNoSolucion.Int(cuadre.Nosol) no solucionadas</b> va a <b>una sola causa</b>, con las reglas
+                    del proceso de soporte de YGMM. <em>Proceso</em>: trae un impedimento que no se puede cerrar en la primera
+                    llamada (envío de técnico, avería masiva, escalado a N2, plazo o cambio de equipo) y la atención fue correcta.
+                    <em>Atención</em>: no trae ninguno de esos y hubo cierre abrupto, un impedimento atribuido al agente o más ítems
+                    de la rúbrica fallados que la mediana de las llamadas que sí se solucionaron (@r.UmbralAtencion de 7, sobre
+                    @FormatoNoSolucion.Int(r.UmbralBase) llamadas). Si hay las dos cosas, se separa: en soporte, muchos escalados y
+                    técnicos se evitan siguiendo el tutorial de Schaman hasta el final, así que conviene revisarlos.
+                </p>
+                <p class="veredicto-ns">
+                    <span class="relleno-atencion"><i></i><b>@FormatoNoSolucion.Pct(100.0 * N(CausaNoSolucion.Atencion) / nosolCausas)</b> atención</span>
+                    <span class="relleno-proceso"><i></i><b>@FormatoNoSolucion.Pct(100.0 * N(CausaNoSolucion.Proceso) / nosolCausas)</b> proceso</span>
+                    <span class="relleno-malo"><i></i><b>@FormatoNoSolucion.Pct(100.0 * N(CausaNoSolucion.ProcesoYAtencion) / nosolCausas)</b> proceso con fallos de atención</span>
+                    <span class="relleno-tenue"><i></i><b>@FormatoNoSolucion.Pct(100.0 * (N(CausaNoSolucion.Cliente) + N(CausaNoSolucion.SinCausa)) / nosolCausas)</b> cliente o sin causa</span>
+                </p>
+                <div class="filas-ns">
+                    @foreach (var c in causas)
+                    {
+                        var clase = PaginaInternetNoSolucion.ClaseCausa(c.Clave);
+                        <details class="desplegable-ns">
+                            <summary class="fila-ns cols-impedimento">
+                                <span class="fila-ns-nombre">
+                                    @Iconos.Svg("derecha", "chevron-ns")
+                                    <span><span>@c.Nombre</span><span class="sub-ns envuelve">@c.Explicacion</span></span>
+                                </span>
+                                <span class="hbarra-pista" aria-hidden="true"><span class="hbarra-relleno @clase" style="width:@(Formato.Coord(Math.Max(0.6, 100.0 * c.Nosol / maxCausa)))%"></span></span>
+                                <span class="hbarra-media-valor">
+                                    <b>@FormatoNoSolucion.Int(c.Nosol) sin solucionar</b>
+                                    <span class="sub-ns">@FormatoNoSolucion.Pct(c.Peso) de las no solucionadas</span>
+                                </span>
+                            </summary>
+                            <div class="cuerpo-ns">
+                                @if (c.Detalle.Count > 0)
+                                {
+                                    var razones = c.Detalle.Select(y => new BarraNs(
+                                        y.Nombre, y.Grupo switch { "proceso" => "impedimento de proceso", "atencion" => "señal de atención", _ => null },
+                                        y.N, $"{FormatoNoSolucion.Int(y.N)} llamadas", $"{FormatoNoSolucion.Pct(100.0 * y.N / Math.Max(1, c.Nosol))} de esta causa",
+                                        y.Grupo switch { "proceso" => "relleno-proceso", "atencion" => "relleno-atencion", _ => "relleno-tenue" })).ToList();
+                                    <h3 class="desglose-ns-titulo">Por qué (una llamada puede tener varias razones)</h3>
+                                    <partial name="_BarrasNs" model="new BarrasNs(razones)" />
+                                }
+                                @if (datos.MuestrasCausa.TryGetValue(c.Clave, out var mc))
+                                {
+                                    var explicacion = Html.Raw(
+                                        $"{mc.Muestras.Count} de las {FormatoNoSolucion.Int(mc.Total)} no solucionadas de sinAccesoInternet con esta causa.");
+                                    var modeloMuestras = new MuestrasNs("Qué contaron estas llamadas", explicacion, mc.Muestras, mc.Total,
+                                        Model.UrlCsvCausas(c.Clave), true, "No hay texto guardado para esta causa.");
+                                    <partial name="_MuestrasNs" model="modeloMuestras" />
+                                }
+                            </div>
+                        </details>
+                    }
+                </div>
+            </section>
+
+            <div class="rejilla-2">
+                <section class="tarjeta">
+                    <header class="tarjeta-cabecera">
+                        <h2>Los ítems de atención, uno a uno</h2>
+                        <span class="leyenda-ns"><span class="tono-bueno"><i></i>Se solucionó</span><span class="tono-critico"><i></i>No se solucionó</span></span>
+                    </header>
+                    <p class="nota-ns">
+                        Porcentaje de llamadas en las que el ítem se cumple. <em>No aplica</em> y <em>sin dato</em> salen del
+                        denominador. Fuera, por circulares, «confirmó que quedaba resuelto» y «frases de resolución».
+                    </p>
+                    <div class="hbarras libre rubrica-ns">
+                        @foreach (var x in r.Rubrica)
+                        {
+                            <div class="hbarra" title="@x.Nombre · Se solucionó @FormatoNoSolucion.Pct(x.PctSolucionadas) · No se solucionó @FormatoNoSolucion.Pct(x.PctNoSolucionadas) · Brecha @FormatoNoSolucion.Pp(x.Brecha)">
+                                <span class="hbarra-nombre">@x.Nombre</span>
+                                <span class="rubrica-ns-barras" aria-hidden="true">
+                                    <span class="hbarra-media-pista"><span class="hbarra-media-relleno tono-bueno" style="width:@(Formato.Coord(x.PctSolucionadas ?? 0))%"></span></span>
+                                    <span class="hbarra-media-pista"><span class="hbarra-media-relleno tono-critico" style="width:@(Formato.Coord(x.PctNoSolucionadas ?? 0))%"></span></span>
+                                </span>
+                                <span class="hbarra-media-valor">
+                                    <b>@FormatoNoSolucion.Pp(x.Brecha)</b>
+                                    <span class="sub-ns">@FormatoNoSolucion.Pct(x.PctSolucionadas) vs. @FormatoNoSolucion.Pct(x.PctNoSolucionadas)</span>
+                                </span>
+                            </div>
+                        }
+                    </div>
+                </section>
+
+                <section class="tarjeta">
+                    <header class="tarjeta-cabecera"><h2>¿Hay llamadas repetidas?</h2></header>
+                    @if (r.Repetidas is { } rep)
+                    {
+                        var tramos = rep.Conversaciones - rep.Llamadas;
+                        <ul class="comprobaciones-ns">
+                            <li>
+                                @FormatoNoSolucion.ChipComprobacion(rep.Registros == rep.Conversaciones)
+                                <span>
+                                    <b>@FormatoNoSolucion.Int(rep.Registros) registros</b> de sinAccesoInternet y
+                                    <b>@FormatoNoSolucion.Int(rep.Conversaciones) conversaciones distintas</b>
+                                    (<code>conversationId</code>)@(rep.Registros == rep.Conversaciones
+                                        ? ": ningún registro repetido."
+                                        : $": {FormatoNoSolucion.Int(rep.Registros - rep.Conversaciones)} registros repetidos.")
+                                </span>
+                            </li>
+                            <li>
+                                @FormatoNoSolucion.ChipComprobacion(rep.RegistrosNosol == rep.ConversacionesNosol && rep.ConversacionesNosol == rep.LlamadasNosol)
+                                <span>
+                                    Las <b>@FormatoNoSolucion.Int(rep.RegistrosNosol) no solucionadas</b> son
+                                    @FormatoNoSolucion.Int(rep.ConversacionesNosol) conversaciones y
+                                    @FormatoNoSolucion.Int(rep.LlamadasNosol) llamadas distintas@(rep.RegistrosNosol == rep.LlamadasNosol
+                                        ? ": ninguna se cuenta dos veces." : ".")
+                                </span>
+                            </li>
+                            @if (tramos > 0)
+                            {
+                                <li>
+                                    @FormatoNoSolucion.ChipComprobacion(null)
+                                    <span>
+                                        @FormatoNoSolucion.Int(tramos) conversaciones son tramos de una misma llamada transferida (mismo
+                                        <code>externalConversationId</code> con <code>_1</code>, <code>_2</code>…): son
+                                        @FormatoNoSolucion.Int(rep.Llamadas) llamadas físicas. Cada tramo lo atiende un agente y lleva su
+                                        propia encuesta, así que se cuentan por separado, como en el informe.
+                                    </span>
+                                </li>
+                            }
+                            <li>
+                                @FormatoNoSolucion.ChipComprobacion(null)
+                                <span>
+                                    En «Qué frena el proceso» las filas suman <b>@FormatoNoSolucion.Int(cuadre.SumaFilas)</b> sin solucionar,
+                                    pero son <b>@FormatoNoSolucion.Int(cuadre.ConImpedimento) llamadas</b> con impedimento:
+                                    @FormatoNoSolucion.Int(cuadre.ConVarios) traen dos o más y cuentan en cada uno. No es una llamada
+                                    repetida, es la misma llamada con varios impedimentos.
+                                </span>
+                            </li>
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="nota-ns">Estos datos se trajeron antes de que la web contara las repetidas; saldrá en la próxima actualización.</p>
+                    }
+                </section>
+            </div>
+        }
+        else
+        {
+            <div class="rejilla-2">
+                <section class="tarjeta">
+                    <header class="tarjeta-cabecera"><h2>¿Es de la atención o del proceso?</h2></header>
+                    <p class="nota-ns">
+                        Reparto de las <b>@FormatoNoSolucion.Int(r.CuadrantesNosol) no solucionadas</b>. <em>Proceso</em>: trae un
+                        impedimento que obliga a salir de la llamada (técnico, avería masiva, escalado, plazo, cambio de equipo).
+                        <em>Atención</em>: cierre abrupto, impedimento atribuido al agente, o más ítems de rúbrica fallados que la
+                        mediana de las llamadas que sí se solucionaron (@r.UmbralAtencion de 7, sobre
+                        @FormatoNoSolucion.Int(r.UmbralBase) llamadas).
+                    </p>
+                    @{
+                        var cuadrantes = r.Cuadrantes.Select(q => new BarraNs(
+                            q.Nombre, $"{FormatoNoSolucion.Int(q.Llamadas)} llamadas en total", q.Nosol,
+                            $"{FormatoNoSolucion.Int(q.Nosol)} sin solucionar", $"{FormatoNoSolucion.Pct(q.Peso)} de las no solucionadas",
+                            PaginaInternetNoSolucion.ClaseCuadrante(q.Clave))).ToList();
+                    }
+                    <partial name="_BarrasNs" model="new BarrasNs(cuadrantes)" />
+                </section>
+
+
+                <section class="tarjeta">
+                    <header class="tarjeta-cabecera">
+                        <h2>Los ítems de atención, uno a uno</h2>
+                        <span class="leyenda-ns"><span class="tono-bueno"><i></i>Se solucionó</span><span class="tono-critico"><i></i>No se solucionó</span></span>
+                    </header>
+                    <p class="nota-ns">
+                        Porcentaje de llamadas en las que el ítem se cumple. <em>No aplica</em> y <em>sin dato</em> salen del
+                        denominador. Fuera, por circulares, «confirmó que quedaba resuelto» y «frases de resolución».
+                    </p>
+                    <div class="hbarras libre rubrica-ns">
+                        @foreach (var x in r.Rubrica)
+                        {
+                            <div class="hbarra" title="@x.Nombre · Se solucionó @FormatoNoSolucion.Pct(x.PctSolucionadas) · No se solucionó @FormatoNoSolucion.Pct(x.PctNoSolucionadas) · Brecha @FormatoNoSolucion.Pp(x.Brecha)">
+                                <span class="hbarra-nombre">@x.Nombre</span>
+                                <span class="rubrica-ns-barras" aria-hidden="true">
+                                    <span class="hbarra-media-pista"><span class="hbarra-media-relleno tono-bueno" style="width:@(Formato.Coord(x.PctSolucionadas ?? 0))%"></span></span>
+                                    <span class="hbarra-media-pista"><span class="hbarra-media-relleno tono-critico" style="width:@(Formato.Coord(x.PctNoSolucionadas ?? 0))%"></span></span>
+                                </span>
+                                <span class="hbarra-media-valor">
+                                    <b>@FormatoNoSolucion.Pp(x.Brecha)</b>
+                                    <span class="sub-ns">@FormatoNoSolucion.Pct(x.PctSolucionadas) vs. @FormatoNoSolucion.Pct(x.PctNoSolucionadas)</span>
+                                </span>
+                            </div>
+                        }
+                    </div>
+                </section>
+            </div>
+        }
+
+        <section class="tarjeta">
+            @{
+                var textoTabla = Model.Meta?.Origen == "bigquery"
+                    ? " Las categorías se asignan con la tabla aprendida del informe del 10/09 (99,4 % de acierto en la señal de proceso)"
+                      + (Model.Meta.EtiquetasNuevas is > 0
+                          ? (Model.Meta.EtiquetasPorPalabras is { } porPalabras
+                              ? $". {FormatoNoSolucion.Int(Model.Meta.EtiquetasNuevas)} etiquetas no aparecían entonces (las redacta la IA de DataOrb y salen nuevas): {FormatoNoSolucion.Int(porPalabras)} se clasifican por palabras clave con las reglas del proceso de soporte y el resto va a «Otro impedimento»"
+                              : $"; {FormatoNoSolucion.Int(Model.Meta.EtiquetasNuevas)} etiquetas que no aparecían entonces van a «Otro impedimento»")
+                          : "")
+                      + "."
+                    : "";
+            }
+            <header class="tarjeta-cabecera"><h2>Qué frena el proceso, concretamente</h2></header>
+            <p class="nota-ns">
+                @if (r.CuadreImpedimentos is { } cq)
+                {
+                    <text>
+                        Son <b>@FormatoNoSolucion.Int(cq.ConImpedimento) llamadas no solucionadas distintas</b> con algún impedimento
+                        (@FormatoNoSolucion.Int(cq.SinImpedimento) no traen ninguno). Las filas suman
+                        <b>@FormatoNoSolucion.Int(cq.SumaFilas)</b> porque @FormatoNoSolucion.Int(cq.ConVarios) llamadas traen
+                        <b>varios impedimentos a la vez</b> y cuentan en cada uno: no son llamadas repetidas. «Solo con este» no se
+                        repite entre filas.
+                    </text>
+                }
+                else
+                {
+                    <text>
+                        Una llamada puede traer <b>varios impedimentos a la vez</b> y cuenta en cada categoría que le toca, así que las
+                        filas no suman el total. @FormatoNoSolucion.Int(r.SinImpedimento) llamadas no traen ninguno.
+                    </text>
+                }
+                @textoTabla Pulsa un impedimento para ver su reparto y las llamadas que lo traen.
+            </p>
+            @if (r.Impedimentos.Count > 0)
+            {
+                var maximo = Math.Max(1, r.Impedimentos.Max(y => y.Nosol));
+                <div class="filas-ns">
+                    @foreach (var x in r.Impedimentos)
+                    {
+                        var clase = PaginaInternetNoSolucion.ClaseTipo(x.Tipo);
+                        <details class="desplegable-ns">
+                            <summary class="fila-ns cols-impedimento">
+                                <span class="fila-ns-nombre">
+                                    @Iconos.Svg("derecha", "chevron-ns")
+                                    <span><span>@x.Nombre</span><span class="sub-ns">@PaginaInternetNoSolucion.TextoTipo(x.Tipo)</span></span>
+                                </span>
+                                <span class="hbarra-pista" aria-hidden="true"><span class="hbarra-relleno @clase" style="width:@(Formato.Coord(Math.Max(0.6, 100.0 * x.Nosol / maximo)))%"></span></span>
+                                <span class="hbarra-media-valor">
+                                    <b>@FormatoNoSolucion.Int(x.Nosol) sin solucionar</b>
+                                    <span class="sub-ns">@(x.SoloEste is { } solo ? $"{FormatoNoSolucion.Int(solo)} solo con este · " : "")@FormatoNoSolucion.Int(x.Llamadas) llamadas · @FormatoNoSolucion.Pct(x.Pct)</span>
+                                </span>
+                            </summary>
+                            <div class="cuerpo-ns">
+                                @if (x.Acompanan is { Count: > 0 } acompanan)
+                                {
+                                    <p class="nota-ns">
+                                        De sus @FormatoNoSolucion.Int(x.Nosol) no solucionadas, @FormatoNoSolucion.Int(x.SoloEste ?? 0) solo traen este
+                                        impedimento. Las demás vienen sobre todo con:
+                                        @string.Join(", ", acompanan.Select(y => $"{y.Nombre} ({FormatoNoSolucion.Int(y.N)})")).
+                                    </p>
+                                }
+                                <div class="rejilla-2 desgloses-ns">
+                                    @foreach (var (titulo, filas) in new[] { ("Por marca", x.PorMarca), ("Por servicio", x.PorServicio) })
+                                    {
+                                        if (filas.Count == 0) continue;
+                                        var barras = filas.Select(y => new BarraNs(
+                                            y.Nombre, $"{FormatoNoSolucion.Int(y.Llamadas)} llamadas", y.Nosol,
+                                            $"{FormatoNoSolucion.Int(y.Nosol)} sin solucionar",
+                                            y.Llamadas > 0 ? $"{FormatoNoSolucion.Pct(y.Pct)} de las suyas" : null, clase)).ToList();
+                                        <div>
+                                            <h3 class="desglose-ns-titulo">@titulo</h3>
+                                            <partial name="_BarrasNs" model="new BarrasNs(barras)" />
+                                        </div>
+                                    }
+                                </div>
+                                @if (datos.Muestras.TryGetValue(x.Bit, out var m))
+                                {
+                                    var explicacion = Html.Raw(
+                                        $"{m.Muestras.Count} de las {FormatoNoSolucion.Int(m.Total)} no solucionadas de sinAccesoInternet que traen este impedimento.");
+                                    var modeloMuestras = new MuestrasNs("Qué contaron estas llamadas", explicacion, m.Muestras, m.Total,
+                                        Model.UrlCsv(n3: Agregados.TipologiaInternet, bit: x.Bit), true, "No hay texto guardado para este impedimento.");
+                                    <partial name="_MuestrasNs" model="modeloMuestras" />
+                                }
+                            </div>
+                        </details>
+                    }
+                </div>
+            }
+            else
+            {
+                <p class="vacio">Ninguna llamada trae impedimentos con estos filtros.</p>
+            }
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Dos niveles más de detalle</h2>
+                <span class="tarjeta-nota">avería del ticket · N4 › N5</span>
+            </header>
+            <p class="nota-ns">
+                Solo abre ticket técnico el @FormatoNoSolucion.Pct(Parte(t.ConTicket, t.Llamadas)) de estas llamadas, así que
+                <code>SIN TICKET TECNICO</code> es una categoría real, no un fallo de datos. Pulsa una fila para abrir su desglose.
+            </p>
+            <div class="filas-ns">
+                <div class="fila-ns fila-ns-cabecera cols-averia" aria-hidden="true">
+                    <span>Avería (N4)</span><span class="num">Llamadas</span><span class="num">Encuestadas</span>
+                    <span class="num">No sol.</span><span class="num">% no solución</span>
+                </div>
+                @foreach (var a in r.Averias)
+                {
+                    <details class="desplegable-ns">
+                        <summary class="fila-ns cols-averia">
+                            <span class="fila-ns-nombre">@Iconos.Svg("derecha", "chevron-ns")<span>@a.Nombre</span></span>
+                            <span class="num">@FormatoNoSolucion.Int(a.Llamadas)</span>
+                            <span class="num">@FormatoNoSolucion.Int(a.Encuestadas)</span>
+                            <span class="num">@FormatoNoSolucion.Int(a.Nosol)</span>
+                            <span class="num">@FormatoNoSolucion.ChipTasa(a.Pct, a.Pct is not null && t.Pct is not null ? a.Pct - t.Pct : null)</span>
+                        </summary>
+                        <div class="cuerpo-ns">
+                            @{
+                                var detalle = a.Detalle.Select(h => new BarraNs(
+                                    h.Nombre, $"{FormatoNoSolucion.Int(h.Llamadas)} llamadas", h.Nosol,
+                                    $"{FormatoNoSolucion.Int(h.Nosol)} sin solucionar",
+                                    h.Encuestadas > 0 ? $"{FormatoNoSolucion.Pct(h.Pct)} de sus encuestadas" : "sin encuestas", "relleno-proceso")).ToList();
+                            }
+                            <partial name="_BarrasNs" model="new BarrasNs(detalle)" />
+                        </div>
+                    </details>
+                }
+                @* Total al pie (nunca arriba): el de todas las llamadas de sinAccesoInternet con estos filtros. *@
+                <div class="fila-ns fila-total cols-averia">
+                    <span class="fila-ns-nombre">TOTAL</span>
+                    <span class="num">@FormatoNoSolucion.Int(t.Llamadas)</span>
+                    <span class="num">@FormatoNoSolucion.Int(t.Encuestadas)</span>
+                    <span class="num">@FormatoNoSolucion.Int(t.Nosol)</span>
+                    <span class="num">@FormatoNoSolucion.Pct(t.Pct)</span>
+                </div>
+            </div>
+        </section>
+    }
+}

@@ -1,0 +1,89 @@
+@model GraficoGaia
+@* Columnas por etapa, semana o día con una o varias series (en grupo), con las piezas de la guía. Cada columna lleva su
+   valor en una pastilla (.etiqueta-punto) con el color de su serie; con dos series, la de valor más alto pone la pastilla
+   encima de su columna y la otra debajo del borde de la suya; con más de ~20 periodos se rotula uno de cada dos o menos.
+   Con PorUmbral, las columnas y las pastillas llevan el color de la adherencia. Dos series con escalas muy distintas:
+   eje izquierdo y derecho. Cada periodo lleva una banda con <title> para la ficha. *@
+@{
+    var n = Math.Max(1, Model.Etiquetas.Count);
+    var series = Model.Series;
+    var doble = Doble(Model);
+    var todos = series.SelectMany(s => s.Valores).Where(v => v is not null).Select(v => v!.Value).ToList();
+    var escalas = doble
+        ? series.Select(s => Escala(Model, s.Valores.Where(v => v is not null).Select(v => v!.Value), true)).ToArray()
+        : new[] { Escala(Model, todos, true) };
+    EscalaGaia Esc(int k) => escalas[doble ? k : 0];
+    double X(int i) => (i + 0.5) / n;
+    var grupo = Math.Min(0.12, 0.7 / n);
+    var ancho = grupo / series.Count;
+    var rotulados = Rotulados(Model);
+    // Por etapa y con una sola serie: preconexión de un color y aseguramiento de otro (los de la marca), no uno por umbral.
+    var porEtapa = Model.PorEtapa && series.Count == 1;
+    var pasoX = Math.Max(1, (int)Math.Ceiling(n / (double)Model.MaxEtiquetasX));
+}
+@if (Model.ConLeyenda)
+{
+    @await Html.PartialAsync("_LeyendaGraficoGaia", Model)
+}
+<figure class="grafica lineas-ns@(Model.EjeX ? "" : " sin-eje-x")" role="img" aria-label="@Model.Descripcion">
+    <div class="plano">
+        <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
+            @foreach (var v in escalas[0].Marcas())
+            {
+                <line class="rejilla-linea" x1="0" x2="1000" y1="@C(escalas[0].Y(v))" y2="@C(escalas[0].Y(v))" vector-effect="non-scaling-stroke" />
+            }
+            @for (var k = 0; k < series.Count; k++)
+            {
+                for (var i = 0; i < series[k].Valores.Count; i++)
+                {
+                    if (series[k].Valores[i] is not { } v) continue;
+                    var alto = Math.Max(0.004, 1 - Esc(k).Y(v));
+                    <rect class="columna columna-serie @series[k].Clase@(Model.PorUmbral ? " columna-umbral " + TonoAdherencia(v) : "")@(porEtapa ? " " + ClaseEtapa(Model.Titulos[i]) : "")" data-i="@i" x="@C(X(i) - grupo / 2 + k * ancho)" y="@C(1 - alto)" width="@C(ancho)" height="@C(alto)" />
+                }
+            }
+            @for (var i = 0; i < Model.Etiquetas.Count; i++)
+            {
+                <rect class="banda" data-i="@i" data-x="@Formato.Coord(X(i))" x="@C((double)i / n)" y="0" width="@C(1.0 / n)" height="1000"><title>@Ficha(Model, i)</title></rect>
+            }
+        </svg>
+        @foreach (var v in escalas[0].Marcas())
+        {
+            <span class="eje-y" style="top:@P(escalas[0].Y(v))">@Eje(Model, v, escalas[0])</span>
+        }
+        @if (doble)
+        {
+            foreach (var v in escalas[1].Marcas())
+            {
+                <span class="eje-y derecho" style="top:@P(escalas[1].Y(v))">@Eje(Model, v, escalas[1])</span>
+            }
+        }
+        @for (var k = 0; k < series.Count; k++)
+        {
+            for (var i = 0; i < series[k].Valores.Count; i++)
+            {
+                if (!rotulados.Contains(i) || series[k].Valores[i] is not { } v) continue;
+                var y = Esc(k).Y(v);
+                var arriba = true;
+                if (series.Count == 2 && series[1 - k].Valores[i] is { } otro)
+                {
+                    var yOtro = Esc(1 - k).Y(otro);
+                    arriba = y < yOtro || (y == yOtro && k == 0);
+                }
+                // Una pastilla «debajo» de un punto pegado al eje X pisaría sus fechas; una «encima» de uno pegado al techo se saldría.
+                if (!arriba && y > 0.9) arriba = true;
+                else if (arriba && y < 0.06 && series.Count == 2) arriba = false;
+                <span class="etiqueta-punto @series[k].Clase@(Model.PorUmbral ? " " + TonoAdherencia(v) : "")@(porEtapa ? " " + ClaseEtapa(Model.Titulos[i]) : "") @(arriba ? "arriba" : "abajo")@(i == 0 ? " al-inicio" : i == n - 1 ? " al-final" : "")" style="left:@P(X(i));top:@P(y)">@Valor(v, Model)</span>
+            }
+        }
+        @if (Model.EjeX)
+        {
+            @for (var i = 0; i < Model.Etiquetas.Count; i++)
+            {
+                if (i == Model.Etiquetas.Count - 1 || (i % pasoX == 0 && Model.Etiquetas.Count - 1 - i >= pasoX))
+                {
+                    <span class="eje-x" style="left:@P(X(i))">@Model.Etiquetas[i]</span>
+                }
+            }
+        }
+    </div>
+</figure>

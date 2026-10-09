@@ -1,0 +1,82 @@
+@model TableroModelo
+@* Panel de filtros (guía de estilos, 4): sin scroll interno; lo de siempre arriba y el resto en
+   «Más filtros». Los desplegables con menos de dos opciones no se pintan. *@
+@{
+    var f = Model.Filtros;
+    var url = "/" + Model.Pagina.Clave;
+    var borrar = new FiltrosTablero { Vista = f.Vista };
+    var visibles = Model.Grupos.Where(g => g.Visible && !TableroModelo.CamposEnMasFiltros.Contains(g.Campo)).ToList();
+    var plegados = Model.Grupos.Where(g => g.Visible && TableroModelo.CamposEnMasFiltros.Contains(g.Campo)).ToList();
+    var marcadosPlegados = plegados.Sum(g => g.Marcadas);
+}
+<aside class="panel-filtros" aria-label="Filtros">
+    <partial name="_PanelCabecera" />
+    <form method="get" action="@url" data-tablero-filtros>
+        <input type="hidden" name="vista" value="@f.Vista" />
+
+        <div class="grupo-filtros">
+            @if (Model.CalendarioDesde is { } cmin && Model.CalendarioHasta is { } cmax && Model.Desde is { } desde && Model.Hasta is { } hasta)
+            {
+                var min = FiltrosTablero.EscribirFecha(cmin);
+                var max = FiltrosTablero.EscribirFecha(cmax);
+                <div class="campo">
+                    <span class="campo-titulo">Fecha</span>
+                    <div class="rango-fechas">
+                        <input type="date" name="desde" value="@FiltrosTablero.EscribirFecha(desde)" min="@min" max="@max" aria-label="Desde" />
+                        <input type="date" name="hasta" value="@FiltrosTablero.EscribirFecha(hasta)" min="@min" max="@max" aria-label="Hasta" />
+                    </div>
+                </div>
+            }
+            @foreach (var g in visibles.Where(g => g.Campo == "mes"))
+            {
+                <partial name="_Desplegable" model="g" />
+            }
+        </div>
+
+        @foreach (var bloque in EnBloques(visibles.Where(g => g.Campo != "mes"), ["sector", "super", "team"], ["auditor"]))
+        {
+            <div class="grupo-filtros">
+                @foreach (var g in bloque)
+                {
+                    <partial name="_Desplegable" model="g" />
+                }
+            </div>
+        }
+
+        @if (plegados.Count > 0)
+        {
+            <details class="mas-filtros" open="@(marcadosPlegados > 0)">
+                <summary>
+                    @Iconos.Svg("mas-filtros")
+                    <span>Más filtros</span>
+                    @if (marcadosPlegados > 0)
+                    {
+                        <span class="contador">@marcadosPlegados</span>
+                    }
+                    @Iconos.Svg("abajo", "chevron")
+                </summary>
+                @foreach (var g in plegados)
+                {
+                    <partial name="_Desplegable" model="g" />
+                }
+            </details>
+        }
+        <noscript><button type="submit" class="boton-aplicar">Aplicar filtros</button></noscript>
+    </form>
+
+    <div class="panel-pie">
+        <div class="acciones-filtros">
+            <a class="btn-panel primario" href="@(url + "/descargar" + f.Consulta())"
+               title="Descargar en Excel las @Formato.Entero(Model.TotalFiltrado) auditorías filtradas">
+                @Iconos.Svg("hoja") Descargar Excel
+            </a>
+            <a class="btn-panel" href="@(url + borrar.Consulta())" data-parcial>@Iconos.Svg("borrar-filtros") Borrar filtros</a>
+        </div>
+        <form method="post" action="/datos/recargar" class="estado-datos">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="volver" value="@(url + f.Consulta())" />
+            <span>@Iconos.Svg("reloj") @(Model.DatosCargadosEn is { } c ? "Datos de " + Formato.FechaHora(c) : "Sin datos cargados")</span>
+            <button type="submit" class="enlace">Actualizar</button>
+        </form>
+    </div>
+</aside>

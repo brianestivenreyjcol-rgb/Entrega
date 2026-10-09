@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CDM_Auditorias_Calidad</RootNamespace>
+    <!-- Se arranca con dotnet: la política del equipo bloquea ejecutables sin firma en carpetas de usuario. -->
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClosedXML" Version="0.105.1" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.0" />
+    <!-- CDM No solución: BigQuery por ODBC (driver Simba, DSN BQCOL). -->
+    <PackageReference Include="System.Data.Odbc" Version="8.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Las consultas viajan con la aplicación publicada y se leen en cada carga desde la carpeta
+         de la aplicación (en desarrollo, la del proyecto). Always: que nunca quede una copia vieja. -->
+    <None Remove="Consultas\**" />
+    <Content Include="Consultas\**" CopyToOutputDirectory="Always" CopyToPublishDirectory="Always" />
+    <!-- Tabla de impedimentos de CDM No solución: fija, viaja con el código. -->
+    <Content Update="Datos\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- La caché de No solución en desarrollo (unos 60 MB): ni se compila ni se publica. -->
+    <Content Remove="App_Data\**" />
+    <None Remove="App_Data\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="CDM Auditorias Calidad.Tests" />
+  </ItemGroup>
+
+</Project>

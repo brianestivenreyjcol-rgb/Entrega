@@ -1,0 +1,203 @@
+@model PaginaLlamadasGaia
+@* Llamadas: las llamadas una a una (de 100 en 100, de la más reciente a la más antigua), con buscador por ID de
+   conversación, ID externo, cliente o agente. Cada fila se despliega (details, la pieza «Filas que se despliegan»
+   de la guía) con los resúmenes, las calificaciones del estilo, la venta y los ID para copiar. La marca y la etapa
+   van bajo el nombre del agente para que la fila quepa en el ancho mínimo del tablero. *@
+@{
+    Layout = "_InformeGaia";
+}
+@if (!Model.Preparando)
+{
+    var t = Model.Total!;
+    var desde = (Model.Pagina - 1) * PaginaLlamadasGaia.PorPagina + 1;
+    var hasta = desde + Model.Filas.Count - 1;
+
+    <section class="tarjeta">
+        <header class="tarjeta-cabecera">
+            <h2>Llamadas</h2>
+            <span class="tarjeta-nota">@Formato.Entero(Model.TotalFilas) @(Model.TotalFilas == 1 ? "llamada" : "llamadas")@(string.IsNullOrEmpty(Model.Busqueda) ? "" : " con la búsqueda"), de la más reciente a la más antigua</span>
+        </header>
+
+        <form method="get" action="@PaginaGaia.Ruta(Model.Pestana)" class="buscar-ns" role="search" data-parcial>
+            @foreach (var p in Model.Filtros?.Parametros() ?? [])
+            {
+                <input type="hidden" name="@p.Key" value="@p.Value" />
+            }
+            <span class="buscar-ns-campo ancho">
+                @Iconos.Svg("buscar")
+                <input type="search" name="q" value="@Model.Busqueda" aria-label="Buscar llamada"
+                       placeholder="ID de conversación, ID externo, cliente o agente" />
+            </span>
+            <button type="submit" class="boton-aplicar">Buscar</button>
+            @if (!string.IsNullOrEmpty(Model.Busqueda))
+            {
+                <a class="enlace" href="@Model.UrlCon(("q", null), ("pagina", null))" data-parcial>Quitar búsqueda</a>
+            }
+        </form>
+
+        @if (Model.Filas.Count > 0)
+        {
+            <div class="filas-ns filas-llamadas">
+                <div class="fila-ns fila-ns-cabecera cols-llamada" aria-hidden="true">
+                    <span>Fecha y hora</span>
+                    <span>Agente</span>
+                    <span>Marca</span>
+                    <span>Etapa</span>
+                    <span class="num">Duración</span>
+                    <span>Rellam. 72 h</span>
+                    <span>Encuesta</span>
+                    <span>Sent. final</span>
+                    <span>Motivo</span>
+                </div>
+                @foreach (var l in Model.Filas)
+                {
+                    var calificaciones = new[]
+                    {
+                        ("Saludo", l.CalificacionSaludo), ("Soy claro y fiable", l.CalificacionLenguajeClaro),
+                        ("Solucionó", l.CalificacionSolucion), ("Resumió", l.CalificacionResumen),
+                        ("Confirmó solución", l.CalificacionConfirmacion), ("Despedida", l.CalificacionCierre),
+                    };
+                    var obstaculos = ObstaculosDe(l.Obstaculos);
+                    var motivos = string.Join(" · ", new[] { l.Motivo1, l.Motivo2, l.Motivo3 }.Where(m => m.Length > 0 && m != "NA").Select(m => MotivoLegible(m)).DefaultIfEmpty("—"));
+                    <details class="desplegable-ns">
+                        <summary class="fila-ns cols-llamada" title="Pulsa para ver el detalle de la llamada">
+                            <span class="fila-ns-nombre">
+                                @Iconos.Svg("derecha", "chevron-ns")
+                                <span class="recorta">@Formato.Fecha(DateOnly.FromDateTime(l.FechaHora)) <span class="texto-tenue">@l.FechaHora.ToString("HH:mm")</span></span>
+                            </span>
+                            <span class="recorta" title="@l.Agente · @l.Marca · @EtapaLegible(l.TipoConexion)">@l.Agente</span>
+                            <span class="recorta" title="@l.Marca"><i class="marca-punto @ClaseMarca(l.Marca)"></i>@l.Marca</span>
+                            <span class="recorta" title="@EtapaLegible(l.TipoConexion)">@EtapaCorta(l.TipoConexion).Replace(".", "")</span>
+                            <span class="num">@Duracion(l.DuracionSegundos)</span>
+                            <span>@RellamadaTexto(l.Rellamada72h)</span>
+                            <span>@EncuestaTexto(l.EncuestaSolucion)</span>
+                            <span>@Texto(l.SentimientoFinal)</span>
+                            <span class="recorta" title="@MotivoLegible(l.Motivo1)">@MotivoLegible(l.Motivo1)</span>
+                        </summary>
+                        <div class="cuerpo-ns detalle-gaia">
+                            <div class="detalle-gaia-columna">
+                                <h3>Resumen del contacto</h3>
+                                @await Html.PartialAsync("_TextoLargoGaia", l.ResumenContacto)
+                                <h3>Resumen de la resolución</h3>
+                                @await Html.PartialAsync("_TextoLargoGaia", l.ResumenResolucion)
+                                @if (obstaculos.Count > 0)
+                                {
+                                    <h3>Obstáculos</h3>
+                                    <ul class="lista-obstaculos">
+                                        @foreach (var o in obstaculos)
+                                        {
+                                            <li>@o</li>
+                                        }
+                                    </ul>
+                                }
+                            </div>
+                            <div class="detalle-gaia-columna">
+                                <h3>Estilo de atención</h3>
+                                <ul class="calificaciones-gaia">
+                                    @foreach (var (nombre, valor) in calificaciones)
+                                    {
+                                        <li><span>@nombre</span><span class="@ChipCalificacion(valor)">@Calificacion(valor)</span></li>
+                                    }
+                                </ul>
+                                <h3>Venta</h3>
+                                <dl class="datos-gaia">
+                                    <dt>Intento de venta</dt><dd>@SiNo(l.IntentoVenta)</dd>
+                                    <dt>Resultado</dt><dd>@Texto(l.ResultadoVenta)</dd>
+                                    <dt>Venta</dt><dd>@SiNo(l.TieneVenta)</dd>
+                                    @if (HayTexto(l.CategoriaOferta))
+                                    {
+                                        <dt>Oferta</dt><dd>@l.CategoriaOferta</dd>
+                                    }
+                                </dl>
+                                <h3>La llamada</h3>
+                                <dl class="datos-gaia">
+                                    <dt>Sector y oleada</dt><dd>@Texto(l.Sector) · @Texto(l.Oleada)</dd>
+                                    <dt>Formador</dt><dd>@Texto(l.Formador)</dd>
+                                    <dt>Supervisor</dt><dd>@Texto(l.Supervisor)</dd>
+                                    <dt>Motivos</dt><dd>@motivos</dd>
+                                    <dt>Sentimiento</dt><dd>@Texto(l.SentimientoInicial) al empezar · @Texto(l.SentimientoFinal) al acabar</dd>
+                                    <dt>Riesgo de baja</dt><dd>@Texto(l.RiesgoChurn)</dd>
+                                    <dt>Resolución</dt><dd>@Texto(l.EstadoResolucion)</dd>
+                                </dl>
+                            </div>
+                            <div class="detalle-gaia-ids">
+                                <span class="muestra-ns-id">
+                                    <span>ID de conversación <b>@l.IdConversacion</b></span>
+                                    <button type="button" class="enlace" data-copiar="@l.IdConversacion">@Iconos.Svg("copiar") Copiar ID</button>
+                                </span>
+                                @if (!string.IsNullOrEmpty(l.IdExterno))
+                                {
+                                    <span class="muestra-ns-id">
+                                        <span>ID externo <b>@l.IdExterno</b></span>
+                                        <button type="button" class="enlace" data-copiar="@l.IdExterno">@Iconos.Svg("copiar") Copiar ID</button>
+                                    </span>
+                                }
+                                @if (!string.IsNullOrEmpty(l.IdCliente))
+                                {
+                                    <span class="muestra-ns-id">
+                                        <span>Cliente <b>@l.IdCliente</b></span>
+                                        <button type="button" class="enlace" data-copiar="@l.IdCliente">@Iconos.Svg("copiar") Copiar</button>
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                    </details>
+                }
+                <div class="fila-ns fila-total cols-llamada" title="Todas las llamadas del filtro, no solo las de esta página">
+                    <span class="fila-ns-nombre">TOTAL</span>
+                    <span class="recorta">@Formato.Entero(t.Llamadas) llamadas</span>
+                    <span></span>
+                    <span></span>
+                    <span class="num">@Duracion(t.Tmo)</span>
+                    <span>@Formato.Porcentaje(t.Rellamada72)</span>
+                    <span>@Formato.Porcentaje(t.NoSolucion)</span>
+                    <span>@Formato.Porcentaje(t.SentimientoPositivoFinal)</span>
+                    <span class="texto-tenue">TMO y % del filtro</span>
+                </div>
+            </div>
+
+            @if (Model.TotalPaginas > 1)
+            {
+                <nav class="paginacion" aria-label="Páginas de llamadas">
+                    <span class="pestanas-vista">
+                        @if (Model.Pagina > 1)
+                        {
+                            <a class="segmento" href="@Model.UrlPagina(1)" data-parcial>Primera</a>
+                            <a class="segmento" href="@Model.UrlPagina(Model.Pagina - 1)" data-parcial>Anterior</a>
+                        }
+                        else
+                        {
+                            <span class="segmento desactivado">Primera</span>
+                            <span class="segmento desactivado">Anterior</span>
+                        }
+                        <span class="segmento activo" aria-current="page">@Model.Pagina de @Model.TotalPaginas</span>
+                        @if (Model.Pagina < Model.TotalPaginas)
+                        {
+                            <a class="segmento" href="@Model.UrlPagina(Model.Pagina + 1)" data-parcial>Siguiente</a>
+                            <a class="segmento" href="@Model.UrlPagina(Model.TotalPaginas)" data-parcial>Última</a>
+                        }
+                        else
+                        {
+                            <span class="segmento desactivado">Siguiente</span>
+                            <span class="segmento desactivado">Última</span>
+                        }
+                    </span>
+                    <span class="paginacion-texto">Llamadas @Formato.Entero(desde) a @Formato.Entero(hasta) de @Formato.Entero(Model.TotalFilas)</span>
+                </nav>
+            }
+        }
+        else
+        {
+            <p class="vacio">
+                @if (!string.IsNullOrEmpty(Model.Busqueda))
+                {
+                    @:Ninguna llamada coincide con «@Model.Busqueda».
+                }
+                else
+                {
+                    @:Ninguna llamada cumple estos filtros.
+                }
+            </p>
+        }
+    </section>
+}

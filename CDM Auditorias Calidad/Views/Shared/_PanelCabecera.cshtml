@@ -1,0 +1,9 @@
+@* Cabecera común de los paneles de filtros: el título y el botón que pliega el panel, más el raíl vertical «Filtros»
+   que queda cuando está plegado (solo en pantalla ancha). Lo pliega site.js y recuerda el estado en localStorage. *@
+<button type="button" class="cmp-panel-rail" data-panel-abrir title="Mostrar los filtros" aria-label="Mostrar los filtros">
+    @Iconos.Svg("filtro")<span class="cmp-rail-texto">Filtros</span>
+</button>
+<div class="panel-cab">
+    <p class="panel-titulo">Filtros</p>
+    <button type="button" class="cmp-plegar" data-panel-plegar title="Plegar los filtros" aria-label="Plegar los filtros">@Iconos.Svg("izquierda")</button>
+</div>

@@ -1,0 +1,217 @@
+@model PaginaResumenGaia
+@* Resumen (la portada de GAIA): la tira de indicadores, el avance por etapa de formación y la evolución diaria
+   del indicador elegido, los indicadores por marca y la actualización de la base de datos. *@
+@{
+    Layout = "_InformeGaia";
+}
+@if (!Model.Preparando)
+{
+    var t = Model.Total!;
+    var f = Model.Filtros!;
+    var kpi = Model.Kpi;
+    var porDefecto = CalculadoraGaia.Kpis[0].Clave;
+    var ayuda = CalculadoraGaia.Kpis.ToDictionary(k => k.Clave, k => k.Ayuda);
+    var hoy = DateOnly.FromDateTime(DateTime.Today);
+    var progreso = Model.AgentesEnNomina > 0 ? Math.Clamp((double)Model.AgentesConLlamadas / Model.AgentesEnNomina, 0, 1) : 0;
+    var columnasMarca = new[] { "adherencia", "rellamada", "nosolucion", "transferencia", "churn", "ofrecimientos", "ventas" };
+
+    <section class="resumen" aria-label="Indicadores">
+        <div class="resumen-dato">
+            <span class="resumen-icono">@Iconos.Svg("telefono")</span>
+            <span class="resumen-titulo">Llamadas</span>
+            <span class="resumen-cifra" data-contar="@t.Llamadas" data-formato="entero">@Formato.Entero(t.Llamadas)</span>
+            <span class="resumen-variacion neutra">en @f.Dias @(f.Dias == 1 ? "día" : "días")</span>
+        </div>
+        <div class="resumen-dato" title="Agentes del Excel de nómina que han hecho llamadas en sus días de formación, sobre los que entran en estos filtros">
+            <span class="resumen-icono">@Iconos.Svg("personas")</span>
+            <span class="resumen-titulo">Agentes</span>
+            <span class="resumen-cifra" data-contar="@Model.AgentesConLlamadas" data-formato="entero">@Formato.Entero(Model.AgentesConLlamadas)</span>
+            <span class="resumen-cobertura">
+                <span class="resumen-cobertura-pista" role="progressbar" aria-label="Agentes con llamadas sobre los de la nómina"
+                      aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Math.Round(progreso * 100)">
+                    <span class="resumen-cobertura-relleno" style="width:@(Formato.Coord(progreso * 100))%"></span>
+                </span>
+                <span class="resumen-cobertura-texto">con llamadas, de @Formato.Entero(Model.AgentesEnNomina) en nómina</span>
+            </span>
+        </div>
+        <div class="resumen-dato destacada" title="@ayuda["adherencia"]">
+            <span class="resumen-icono">@Iconos.Svg("diana")</span>
+            <span class="resumen-titulo">Adherencia</span>
+            <span class="resumen-cifra" data-contar="@Formato.Crudo(t.Adherencia)" data-formato="porcentaje">@Formato.Porcentaje(t.Adherencia)</span>
+            <span class="resumen-variacion neutra">al estilo de atención</span>
+        </div>
+        <div class="resumen-dato" title="@ayuda["rellamada"]">
+            <span class="resumen-icono">@Iconos.Svg("refrescar")</span>
+            <span class="resumen-titulo">Rellamada 72 h</span>
+            <span class="resumen-cifra" data-contar="@Formato.Crudo(t.Rellamada72)" data-formato="porcentaje">@Formato.Porcentaje(t.Rellamada72)</span>
+            <span class="resumen-variacion neutra">menos es mejor</span>
+        </div>
+        <div class="resumen-dato" title="@ayuda["nosolucion"]">
+            <span class="resumen-icono">@Iconos.Svg("no-resuelta")</span>
+            <span class="resumen-titulo">No solución</span>
+            <span class="resumen-cifra" data-contar="@Formato.Crudo(t.NoSolucion)" data-formato="porcentaje">@Formato.Porcentaje(t.NoSolucion)</span>
+            <span class="resumen-variacion neutra">@Formato.Entero(t.RespuestasEncuesta) encuestas respondidas</span>
+        </div>
+        <div class="resumen-dato" title="@ayuda["transferencia"]">
+            <span class="resumen-icono">@Iconos.Svg("transferir")</span>
+            <span class="resumen-titulo">Transferencia</span>
+            <span class="resumen-cifra" data-contar="@Formato.Crudo(t.Transferencia)" data-formato="porcentaje">@Formato.Porcentaje(t.Transferencia)</span>
+            <span class="resumen-variacion neutra">menos es mejor</span>
+        </div>
+        <div class="resumen-dato" title="@ayuda["churn"]">
+            <span class="resumen-icono">@Iconos.Svg("baja-cliente")</span>
+            <span class="resumen-titulo">Churn</span>
+            <span class="resumen-cifra" data-contar="@Formato.Crudo(t.Churn)" data-formato="porcentaje">@Formato.Porcentaje(t.Churn)</span>
+            <span class="resumen-variacion neutra">riesgo de baja alto</span>
+        </div>
+        <div class="resumen-dato" title="@ayuda["ofrecimientos"]">
+            <span class="resumen-icono">@Iconos.Svg("etiqueta")</span>
+            <span class="resumen-titulo">Ofrecimientos</span>
+            <span class="resumen-cifra" data-contar="@Formato.Crudo(t.Ofrecimientos)" data-formato="porcentaje">@Formato.Porcentaje(t.Ofrecimientos)</span>
+            <span class="resumen-variacion neutra">llamadas con intento de venta</span>
+        </div>
+        <div class="resumen-dato" title="@ayuda["ventas"]">
+            <span class="resumen-icono">@Iconos.Svg("carrito")</span>
+            <span class="resumen-titulo">Ventas</span>
+            <span class="resumen-cifra" data-contar="@t.Ventas" data-formato="entero">@Formato.Entero(t.Ventas)</span>
+            <span class="resumen-variacion neutra">@Formato.Porcentaje(t.PorcentajeVentas) de las llamadas</span>
+        </div>
+        <div class="resumen-dato" title="Duración media de las llamadas">
+            <span class="resumen-icono">@Iconos.Svg("reloj")</span>
+            <span class="resumen-titulo">TMO</span>
+            <span class="resumen-cifra">@Duracion(t.Tmo)</span>
+            <span class="resumen-variacion neutra">min:seg por llamada</span>
+        </div>
+    </section>
+
+    @if (t.Llamadas == 0)
+    {
+        <p class="vacio">Ninguna llamada cumple estos filtros.</p>
+    }
+    else
+    {
+        <div class="barra-kpi">
+            <span class="campo-titulo" id="titulo-kpi">Indicador de las gráficas</span>
+            <details class="multi activo selector-kpi" data-campo="kpi">
+                <summary aria-labelledby="titulo-kpi resumen-kpi">
+                    <span class="texto" id="resumen-kpi">@kpi.Nombre</span>
+                    @Iconos.Svg("abajo", "chevron")
+                </summary>
+                <div class="desplegable">
+                    <div class="opciones">
+                        @foreach (var k in CalculadoraGaia.Kpis)
+                        {
+                            <a class="opcion-enlace@(k.Clave == kpi.Clave ? " activa" : "")" href="@Model.UrlCon(("kpi", k.Clave == porDefecto ? null : k.Clave))" data-parcial
+                               aria-current="@(k.Clave == kpi.Clave ? "true" : null)">@k.Nombre</a>
+                        }
+                    </div>
+                </div>
+            </details>
+            <p class="nota-ns">@kpi.Ayuda @(kpi.MejorAlto ? "Más alto es mejor." : "Más bajo es mejor.")</p>
+        </div>
+
+        <div class="rejilla-2">
+            <section class="tarjeta">
+                <header class="tarjeta-cabecera">
+                    <h2>Avance por etapa de formación</h2>
+                    <span class="tarjeta-nota">@kpi.Nombre</span>
+                </header>
+                @await Html.PartialAsync("_ColumnasGaia", Grafico("etapa", Model.PorEtapa, (kpi.Nombre, "serie-a", kpi.Valor)) with { AnchoEstimado = 440, Descripcion = kpi.Nombre + " por etapa de formación" })
+                <p class="nota-ns">De la preconexión (1 a 3) al aseguramiento (1 a 6).</p>
+            </section>
+            <section class="tarjeta">
+                <header class="tarjeta-cabecera">
+                    <h2>Actualización BD</h2>
+                    <span class="tarjeta-nota">DataOrb, por marca</span>
+                </header>
+                @if (Model.Datos!.Actualizacion.Count > 0)
+                {
+                    <div class="tabla-contenedor">
+                        <table class="ranking">
+                            <colgroup><col style="width:34%" /><col style="width:22%" /><col style="width:22%" /><col style="width:22%" /></colgroup>
+                            <thead>
+                                <tr>
+                                    <th scope="col"><span class="cab-columna">Marca</span></th>
+                                    <th scope="col" class="num"><span class="cab-columna">Desde</span></th>
+                                    <th scope="col" class="num"><span class="cab-columna">Última llamada</span></th>
+                                    <th scope="col" class="num"><span class="cab-columna">Hace</span></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var a in Model.Datos.Actualizacion)
+                                {
+                                    var dias = a.UltimaFecha is { } u ? hoy.DayNumber - u.DayNumber : (int?)null;
+                                    <tr>
+                                        <td><i class="marca-punto @ClaseMarca(a.Marca)"></i>@a.Marca</td>
+                                        <td class="num texto-suave">@(a.PrimeraFecha is { } pf ? Formato.Fecha(pf) : "—")</td>
+                                        <td class="num">@(a.UltimaFecha is { } uf ? Formato.Fecha(uf) : "—")</td>
+                                        <td class="num texto-suave">@(dias is null ? "—" : dias <= 0 ? "hoy" : dias == 1 ? "1 día" : dias + " días")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <p class="vacio">Sin datos de actualización.</p>
+                }
+                <p class="nota-ns">La última fecha en que DataOrb tiene llamadas de cada marca, sin filtrar por la nómina: sirve para saber hasta cuándo llegan los datos.</p>
+            </section>
+        </div>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Evolución · @kpi.Nombre</h2>
+                <span class="tarjeta-nota">El indicador (línea) por semana o por día y las llamadas de cada periodo (columnas grises)</span>
+            </header>
+            @await Html.PartialAsync("_IndicadorVolumenGaia", new IndicadorVolumenGaia("resumen", [new IndicadorGaia(kpi.Clave, kpi.Nombre, kpi.Valor)], Model.PorSemana, Model.PorDia))
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Por marca</h2>
+                <span class="tarjeta-nota">las llamadas de los agentes en formación</span>
+            </header>
+            <div class="tabla-contenedor">
+                <table class="ranking tabla-marcas-gaia">
+                    <colgroup><col style="width:15%" /><col style="width:10%" /><col style="width:12%" /><col style="width:12%" /><col style="width:12%" /><col style="width:12%" /><col style="width:12%" /><col style="width:12%" /><col style="width:13%" /></colgroup>
+                    <thead>
+                        <tr>
+                            <th scope="col"><span class="cab-columna">Marca</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Llamadas</span></th>
+                            @foreach (var clave in columnasMarca.Where(c => c != "ventas"))
+                            {
+                                <th scope="col" class="num" title="@ayuda[clave]"><span class="cab-columna">@CalculadoraGaia.Kpi(clave).Nombre.Replace("Rellamada 72 h", "Rellam. 72 h").Replace("Transferencia", "Transf.").Replace("Ofrecimientos", "Ofrec.").Replace("No solución", "No sol.")</span></th>
+                            }
+                            <th scope="col" class="num" title="@ayuda["ventas"]"><span class="cab-columna">Ventas</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var g in Model.PorMarca)
+                        {
+                            <tr>
+                                <td><i class="marca-punto @ClaseMarca(g.Clave)"></i>@g.Texto</td>
+                                <td class="num barra-volumen" data-valor="@g.Indicadores.Llamadas">@Formato.Entero(g.Indicadores.Llamadas)</td>
+                                @foreach (var clave in columnasMarca)
+                                {
+                                    <td class="num">@Formato.Porcentaje(CalculadoraGaia.Kpi(clave).Valor(g.Indicadores))</td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="total">
+                            <td>TOTAL</td>
+                            <td class="num">@Formato.Entero(t.Llamadas)</td>
+                            @foreach (var clave in columnasMarca)
+                            {
+                                <td class="num">@Formato.Porcentaje(CalculadoraGaia.Kpi(clave).Valor(t))</td>
+                            }
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+    }
+}

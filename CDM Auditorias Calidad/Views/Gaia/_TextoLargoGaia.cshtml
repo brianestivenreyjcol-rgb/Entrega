@@ -1,0 +1,16 @@
+@model string
+@* Un resumen largo de DataOrb entero (sin recortes): un párrafo por línea, con su rótulo («Objetivo del Agente») en
+   negrita suave aparte del texto, para que se pueda leer de un vistazo. *@
+@if (string.IsNullOrWhiteSpace(Model))
+{
+    <p class="texto-largo texto-tenue">Sin resumen.</p>
+}
+else
+{
+    <div class="resumen-largo">
+        @foreach (var (rotulo, texto) in Parrafos(Model))
+        {
+            <p class="texto-largo">@if (rotulo is not null){<b class="rotulo-largo">@rotulo:</b>}@texto</p>
+        }
+    </div>
+}

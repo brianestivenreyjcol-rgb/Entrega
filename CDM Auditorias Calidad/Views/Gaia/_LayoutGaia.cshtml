@@ -1,0 +1,14 @@
+@model PaginaGaia
+@* La página entera de GAIA Formación: el documento base y la cabecera común. Lo de dentro (#informe)
+   es _InformeGaia, que es lo único que se pide al filtrar. *@
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "GAIA Formación · " + PaginaGaia.Titulo(Model.Pestana);
+    // El color de la página sigue a la marca filtrada (solo ORANGE, solo YOIGO/MASMOVIL, solo JAZZTEL); si no, el de por defecto.
+    ViewData["Marca"] = MarcaDePagina(Model.Filtros?.Peticion.Marca);
+    ViewData["Area"] = "GAIA";
+    ViewData["Migas"] = new[] { "GAIA Formación", PaginaGaia.Titulo(Model.Pestana) };
+    var cabecera = new CabeceraModelo("GAIA Formación", "Agentes en formación · preconexión y aseguramiento");
+}
+<partial name="_Cabecera" model="cabecera" />
+@RenderBody()

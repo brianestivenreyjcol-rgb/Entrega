@@ -1,0 +1,72 @@
+@model PaginaEvolucionGaia
+@* Evolución («Cronológico» y «Comparativo» del PBI): el indicador elegido día a día (con el volumen debajo) y semana a
+   semana, y los agentes enfrentados en dos indicadores. Los selectores son desplegables de enlaces: cambian ?kpi=,
+   ?x= o ?y= (el valor por defecto se quita de la URL). *@
+@{
+    Layout = "_InformeGaia";
+}
+@if (!Model.Preparando)
+{
+    var t = Model.Total!;
+    if (t.Llamadas == 0)
+    {
+        <p class="vacio">Ninguna llamada cumple estos filtros.</p>
+    }
+    else
+    {
+        var kpi = Model.Kpi;
+        var mediaKpi = kpi.Valor(t);
+        GraficoGaia Linea(string escala, IReadOnlyList<GrupoGaia> grupos)
+            => Grafico(escala, grupos, (kpi.Nombre, "serie-a", kpi.Valor)) with { Descripcion = kpi.Nombre + " por " + escala };
+
+        SelectorGaia Selector(string id, string titulo, KpiGaia actual, string porDefecto)
+            => new(id, titulo, actual.Nombre, CalculadoraGaia.Kpis
+                .Select(k => new OpcionSelectorGaia(k.Nombre, Model.UrlCon((id, k.Clave == porDefecto ? null : k.Clave)), k.Clave == actual.Clave)).ToList());
+
+        var puntos = Model.Agentes
+            .Where(a => Model.KpiX.Valor(a.Indicadores) is not null && Model.KpiY.Valor(a.Indicadores) is not null)
+            .Select(a => new PuntoGaia(a.Agente, a.Sector + " · oleada " + a.Oleada, Model.KpiX.Valor(a.Indicadores)!.Value, Model.KpiY.Valor(a.Indicadores)!.Value, a.Indicadores.Llamadas))
+            .ToList();
+        var dispersion = new DispersionGaia(puntos, Model.KpiX, Model.KpiY, Model.KpiX.Valor(t), Model.KpiY.Valor(t));
+
+        <div class="barra-kpi">
+            @await Html.PartialAsync("_SelectorGaia", Selector("kpi", "Indicador de las gráficas", kpi, PaginaEvolucionGaia.KpiPorDefecto))
+            <p class="nota-ns">@kpi.Ayuda @(kpi.MejorAlto ? "Más alto es mejor." : "Más bajo es mejor.")</p>
+        </div>
+
+        <section class="tarjeta" data-vistas>
+            <header class="tarjeta-cabecera">
+                <h2>@kpi.Nombre</h2>
+                <partial name="_SelectorVistaGaia" />
+            </header>
+            <div data-vista="semana">
+                @await Html.PartialAsync("_LineasGaia", Linea("semana", Model.PorSemana))
+            </div>
+            <div data-vista="dia" hidden>
+                @await Html.PartialAsync("_LineasGaia", Linea("dia", Model.PorDia))
+            </div>
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Agentes frente a frente</h2>
+                <span class="tarjeta-nota">@Formato.Entero(puntos.Count) agentes con @PaginaEvolucionGaia.MinLlamadas llamadas o más</span>
+            </header>
+            <div class="barra-kpi">
+                @await Html.PartialAsync("_SelectorGaia", Selector("x", "Eje horizontal", Model.KpiX, PaginaEvolucionGaia.XPorDefecto))
+                @await Html.PartialAsync("_SelectorGaia", Selector("y", "Eje vertical", Model.KpiY, PaginaEvolucionGaia.YPorDefecto))
+            </div>
+            @if (puntos.Count == 0)
+            {
+                <p class="vacio corto">Ningún agente tiene @PaginaEvolucionGaia.MinLlamadas llamadas con estos filtros.</p>
+            }
+            else
+            {
+                @await Html.PartialAsync("_DispersionGaia", dispersion)
+                <p class="nota-ns">
+                    Cada punto es un agente y su tamaño, su número de llamadas (pasa el ratón para ver el detalle). En el eje horizontal, @Model.KpiX.Nombre (@(Model.KpiX.MejorAlto ? "más alto es mejor" : "más bajo es mejor")); en el vertical, @Model.KpiY.Nombre (@(Model.KpiY.MejorAlto ? "más alto es mejor" : "más bajo es mejor")).
+                </p>
+            }
+        </section>
+    }
+}

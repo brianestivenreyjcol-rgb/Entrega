@@ -1,0 +1,81 @@
+@model PaginaNoSolucion
+@* #informe de CDM No solución: pestañas, avisos, panel de filtros y la pestaña. Al filtrar, site.js
+   lo pide con la cabecera X-Parcial y el controlador lo devuelve sin la página alrededor. Mientras
+   no hay datos, «preparando», y la página se recarga sola cada 10 s. *@
+@{
+    Layout = ViewData["Parcial"] is true ? null : "_LayoutNoSolucion";
+    var ctx = Model.Contexto;
+    var meta = Model.Meta;
+}
+<div id="informe" data-miga="@PaginaNoSolucion.Texto(Model.Pestana)" data-marca-pagina="@MarcaDePagina(Model.Filtros?.Marca)" data-titulo="CDM No solución · @PaginaNoSolucion.Texto(Model.Pestana) · CDM Auditorías Calidad">
+    <nav class="pestanas" aria-label="Pestañas de No solución">
+        @foreach (var p in Enum.GetValues<PestanaNoSolucion>())
+        {
+            <a class="pestana@(p == Model.Pestana ? " activa" : "")" href="@Model.UrlPestana(p)" data-parcial
+               aria-current="@(p == Model.Pestana ? "page" : null)">@PaginaNoSolucion.Texto(p)</a>
+        }
+        <span class="estado-ns" aria-live="polite">
+            @if (meta?.DiaMax is not null)
+            {
+                @Iconos.Svg("reloj")
+                <span>Datos hasta el <b>@FormatoNoSolucion.FechaLarga(meta.DiaMax)</b>@(FormatoNoSolucion.FechaHora(meta.Generado) is { } traidos ? " · traídos " + traidos : "")</span>
+            }
+        </span>
+    </nav>
+
+    <div class="contenedor">
+    @if (Model.Actualizacion == "en-curso")
+    {
+        <div class="aviso aviso-info" role="status">@Iconos.Svg("refrescar") <span>Trayendo los últimos 3 meses de BigQuery. Tarda alrededor de un minuto; mientras tanto se sigue viendo lo de antes. Vuelve a cargar la página cuando termine.</span></div>
+    }
+    else if (Model.Actualizacion == "ya-en-curso")
+    {
+        <div class="aviso aviso-info" role="status">@Iconos.Svg("reloj") <span>Ya hay una descarga en curso o acaba de terminar una: espera un poco antes de volver a pedirla.</span></div>
+    }
+
+    @if (ctx.Preparando)
+    {
+        IgnoreBody();
+        <div class="preparando-ns" data-recargar-en="10" aria-live="polite">
+            <div class="girando" aria-hidden="true"></div>
+            <h2>Preparando los datos</h2>
+            <p>Se están trayendo de BigQuery los últimos 3 meses. Tarda alrededor de un minuto; después queda guardado y entra al instante. Esta página se vuelve a cargar sola.</p>
+            @if (!string.IsNullOrEmpty(ctx.Progreso))
+            {
+                <p class="texto-tenue"><code>@ctx.Progreso</code></p>
+            }
+            @if (!string.IsNullOrEmpty(ctx.ErrorConstruccion))
+            {
+                <p class="texto-tenue">El último intento falló: @ctx.ErrorConstruccion. Se vuelve a intentar.</p>
+            }
+        </div>
+    }
+    else if (!ctx.Listo)
+    {
+        IgnoreBody();
+        <p class="vacio">Todavía no hay días con datos de No solución.</p>
+    }
+    else
+    {
+        @foreach (var aviso in Model.Avisos)
+        {
+            <div class="aviso" role="alert">@Iconos.Svg("alerta") <span>@aviso</span></div>
+        }
+        <div class="tablero">
+            <partial name="_PanelNoSolucion" model="Model" />
+            <main class="contenido">
+                @RenderBody()
+            </main>
+        </div>
+        <p class="pie-ns">
+            Universo: <code>channel = Call</code>, de YOIGO y MASMOVIL en <code>serviceProviderLocation = JAZZBOG</code> y de
+            JAZZTEL y ORANGE en <code>JZZ_BOGOTA</code>. Fuente: <code>@meta!.Proyecto.@meta.Fuente</code>, traída de BigQuery
+            por ODBC en una sola descarga de @meta.Ventana días que se renueva sola cada 12 horas. El equipo sale de cruzar
+            <code>primaryAgentId</code> con la nómina: por <code>DataOrb</code> en YOIGO y MASMOVIL y por la extensión
+            <code>Avaya</code> en JAZZTEL y ORANGE (@FormatoNoSolucion.Pct(meta.CruceNomina) de acierto; por debajo del 99 %
+            la llave estaría mal elegida). Datos disponibles: @FormatoNoSolucion.FechaLarga(meta.DiaMin) –
+            @FormatoNoSolucion.FechaLarga(meta.DiaMax).
+        </p>
+    }
+    </div>
+</div>

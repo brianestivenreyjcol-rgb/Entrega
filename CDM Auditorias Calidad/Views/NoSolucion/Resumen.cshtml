@@ -1,0 +1,180 @@
+@model PaginaResumenNoSolucion
+@* Resumen: la cifra, la evolución diaria por marca, las encuestas por día, los días que peor cerraron
+   y lo que queda fuera de la cifra. *@
+@{
+    Layout = "_InformeNoSolucion";
+    var meta = Model.Meta;
+}
+@if (Model.HayProvisionalesEnRango && meta is not null)
+{
+    <div class="aviso aviso-info" role="note">
+        @Iconos.Svg("reloj")
+        <span>
+            Los últimos @meta.DiasProvisionales.Count días (del @FormatoNoSolucion.FechaLarga(meta.DiasProvisionales[0]) en
+            adelante) son <b>provisionales</b>: las encuestas y la clasificación siguen llegando durante días. Los datos se
+            vuelven a traer solos cada 12 horas, así que estos días se irán completando.
+        </span>
+    </div>
+}
+@if (Model.Datos is { } r)
+{
+    var t = r.Totales;
+    var d = r.DeltaPp;
+    var (claseDelta, iconoDelta) = d switch
+    {
+        null => ("neutra", "igual"),
+        > 0.25 => ("peor", "sube"),
+        < -0.25 => ("mejor", "baja"),
+        _ => ("neutra", "igual"),
+    };
+
+    <section class="resumen" aria-label="Indicadores">
+        <div class="resumen-dato destacada" title="No solucionadas ÷ (solucionadas + no solucionadas), sobre llamadas entrantes encuestadas">
+            <span class="resumen-icono">@Iconos.Svg("alerta")</span>
+            <span class="resumen-titulo">No solución</span>
+            <span class="resumen-cifra" data-contar="@Formato.Crudo(t.Pct / 100)" data-formato="porcentaje">@FormatoNoSolucion.Pct(t.Pct)</span>
+            <span class="resumen-variacion @claseDelta">
+                @if (d is not null)
+                {
+                    @Iconos.Tendencia(iconoDelta)
+                }
+                @(d is null ? "sin periodo previo comparable" : $"{FormatoNoSolucion.Pp(Math.Abs(d.Value)).TrimStart('+')} vs. los {r.Ventana.Dias} días previos")
+            </span>
+        </div>
+        <div class="resumen-dato">
+            <span class="resumen-icono">@Iconos.Svg("no-resuelta")</span>
+            <span class="resumen-titulo">No solucionadas</span>
+            <span class="resumen-cifra" data-contar="@t.Nosol" data-formato="entero">@FormatoNoSolucion.Int(t.Nosol)</span>
+            <span class="resumen-variacion neutra">el cliente dijo que no</span>
+        </div>
+        <div class="resumen-dato">
+            <span class="resumen-icono">@Iconos.Svg("portapapeles")</span>
+            <span class="resumen-titulo">Encuestadas</span>
+            <span class="resumen-cifra" data-contar="@t.Encuestadas" data-formato="entero">@FormatoNoSolucion.Int(t.Encuestadas)</span>
+            <span class="resumen-variacion neutra">cobertura @FormatoNoSolucion.Pct(t.Cobertura) de las entrantes</span>
+        </div>
+        <div class="resumen-dato">
+            <span class="resumen-icono">@Iconos.Svg("telefono")</span>
+            <span class="resumen-titulo">Llamadas entrantes</span>
+            <span class="resumen-cifra" data-contar="@t.Llamadas" data-formato="entero">@FormatoNoSolucion.Int(t.Llamadas)</span>
+            <span class="resumen-variacion neutra">en @r.Ventana.Dias días</span>
+        </div>
+        <div class="resumen-dato" title="Llamadas a las que se les encontró el equipo en la nómina">
+            <span class="resumen-icono">@Iconos.Svg("cruce")</span>
+            <span class="resumen-titulo">Cruce con nómina</span>
+            <span class="resumen-cifra" data-contar="@Formato.Crudo(r.CruceNomina / 100)" data-formato="porcentaje">@FormatoNoSolucion.Pct(r.CruceNomina)</span>
+            <span class="resumen-variacion neutra">llamadas con equipo asignado</span>
+        </div>
+    </section>
+
+    @if (r.Parciales.Count > 0)
+    {
+        <div class="aviso" role="note">
+            @Iconos.Svg("alerta")
+            <span>
+                <b>@(r.Parciales.Count == 1 ? "1 día parcial" : $"{r.Parciales.Count} días parciales")</b> en el rango
+                (@string.Join(", ", r.Parciales.Select(FormatoNoSolucion.FechaLarga))): la extracción no llegó al 80 % de la
+                mediana de su mismo día de la semana, así que su volumen no es comparable. Van con línea discontinua.
+            </span>
+        </div>
+    }
+
+    <div class="rejilla-2">
+        <section class="tarjeta crono-tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Cómo evoluciona</h2>
+                <span class="tarjeta-nota">% de no solución diario, por marca</span>
+            </header>
+            <div class="leyenda-ns centrada">
+                @foreach (var m in r.Marcas)
+                {
+                    <span class="@PaginaNoSolucion.ClaseMarca(m)"><i></i>@m</span>
+                }
+                @if (r.Parciales.Count > 0)
+                {
+                    <span><i class="discontinua"></i>día parcial</span>
+                }
+            </div>
+            @if (r.Serie.Count > 0)
+            {
+                <partial name="_LineasNs" model="Model.GraficoEvolucion()" />
+            }
+            <p class="nota-ns">Un día con menos de @Agregados.MinEncPunto encuestas de una marca no dibuja punto: su porcentaje es ruido.</p>
+        </section>
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Encuestas recogidas cada día</h2>
+                <span class="tarjeta-nota">los días parciales, en gris</span>
+            </header>
+            <partial name="_EncuestasDiarias" model="r" />
+        </section>
+    </div>
+
+    <div class="rejilla-2">
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Los días que peor cerraron</h2>
+                <span class="tarjeta-nota">el total es el de todo el rango</span>
+            </header>
+            <p class="nota-ns">Días completos con al menos <b>@r.SueloDia encuestas</b>.</p>
+            @if (r.Peores.Count > 0)
+            {
+                <div class="tabla-contenedor">
+                    <table class="ranking">
+                        <colgroup><col style="width:40%" /><col style="width:17%" /><col style="width:12%" /><col style="width:31%" /></colgroup>
+                        <thead>
+                            <tr>
+                                <th scope="col"><button type="button" class="ordenar">Día</button></th>
+                                <th scope="col" class="num"><button type="button" class="ordenar">Encuestadas</button></th>
+                                <th scope="col" class="num"><button type="button" class="ordenar">No sol.</button></th>
+                                <th scope="col" class="num" aria-sort="descending"><button type="button" class="ordenar">% no solución</button></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (var i = 0; i < r.Peores.Count; i++)
+                            {
+                                var x = r.Peores[i];
+                                <tr>
+                                    <td class="celda-nombre" data-valor="@x.Dia"><div class="nombre-fila"><span class="puesto-ns">@(i + 1)</span><span class="nombre-texto">@FormatoNoSolucion.FechaLarga(x.Dia)</span><span class="pastilla-dato">@x.DiaSemana</span></div></td>
+                                    <td class="num" data-valor="@x.Encuestadas">@FormatoNoSolucion.Int(x.Encuestadas)</td>
+                                    <td class="num" data-valor="@x.Nosol">@FormatoNoSolucion.Int(x.Nosol)</td>
+                                    <td class="num" data-valor="@Formato.Crudo(x.Pct)">@FormatoNoSolucion.ChipTasa(x.Pct, x.Desvio)</td>
+                                </tr>
+                            }
+                        </tbody>
+                        @* Total al pie (nunca arriba): el del rango entero, con todos sus días. *@
+                        <tfoot>
+                            <tr class="total">
+                                <td>TOTAL</td>
+                                <td class="num">@FormatoNoSolucion.Int(t.Encuestadas)</td>
+                                <td class="num">@FormatoNoSolucion.Int(t.Nosol)</td>
+                                <td class="num">@FormatoNoSolucion.Pct(t.Pct)</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <p class="vacio">Ningún día completo llega a @r.SueloDia encuestas con estos filtros.</p>
+            }
+        </section>
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera"><h2>Qué queda fuera de la cifra</h2></header>
+            <ul class="lista-ns">
+                <li>
+                    El <b>saliente no se encuesta</b>: de @FormatoNoSolucion.Int(r.Saliente.Llamadas) llamadas salientes del
+                    rango solo hay @FormatoNoSolucion.Int(r.Saliente.Respuestas) respuestas, así que todo lo de arriba es entrante.
+                </li>
+                <li>
+                    La encuesta cubre el <b>@FormatoNoSolucion.Pct(t.Cobertura)</b> de las entrantes: comparar equipos solo vale
+                    si su cobertura se parece, y eso se ve en la pestaña Equipos.
+                </li>
+                <li>
+                    Las diferencias entre dos porcentajes se escriben con «%» y son una <b>resta</b>, no una variación
+                    relativa: 19,6 % frente a 20,1 % es −0,5 %.
+                </li>
+            </ul>
+        </section>
+    </div>
+}

@@ -1,0 +1,33 @@
+@model TableroModelo
+@* «Total auditorías y nota promedio por sector»: barras horizontales (.hbarras) ordenadas por
+   cantidad, con la nota en pareja (.hbarra-media). Pulsar un sector lo añade al filtro (o lo
+   quita, si ya estaba). *@
+@{
+    var url = "/" + Model.Pagina.Clave;
+    var max = Model.Sectores.Count > 0 ? Math.Max(1, Model.Sectores.Max(s => s.Cantidad)) : 1;
+    var hayMarca = Model.Sectores.Any(s => s.Marcado);
+}
+@if (Model.Sectores.Count == 0)
+{
+    <p class="vacio">Sin auditorías con estos filtros</p>
+}
+else
+{
+    <div class="hbarras-cabecera" aria-hidden="true"><span>Sector</span><span>Auditorías</span><span>Nota promedio</span></div>
+    <div class="hbarras@(hayMarca ? " con-marca" : "")">
+        @foreach (var s in Model.Sectores)
+        {
+            var ancho = Formato.Coord((double)s.Cantidad / max * 80) + "%";
+            var nota = Formato.Coord(Math.Clamp(s.Nota ?? 0, 0, 1) * 100) + "%";
+            <a class="hbarra@(s.Marcado ? " marcada" : "")" href="@(url + Model.Filtros.Alternar("sector", s.Sector).Consulta())" data-parcial
+               title="@s.Sector · Auditorías @Formato.Entero(s.Cantidad) · Nota @Formato.Porcentaje(s.Nota) · @(s.Marcado ? "Pulsa para quitar el filtro" : "Pulsa para filtrar")">
+                <span class="hbarra-nombre">@s.Sector</span>
+                <span class="hbarra-pista"><span class="hbarra-relleno" style="width:@ancho"></span><span class="hbarra-valor">@Formato.Entero(s.Cantidad)</span></span>
+                <span class="hbarra-media">
+                    <span class="hbarra-media-pista"><span class="hbarra-media-relleno" style="width:@nota"></span></span>
+                    <span class="hbarra-media-valor">@Formato.Porcentaje(s.Nota)</span>
+                </span>
+            </a>
+        }
+    </div>
+}

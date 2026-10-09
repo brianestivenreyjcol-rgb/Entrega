@@ -1,0 +1,125 @@
+@model IndicadorVolumenGaia
+@* Indicador + volumen, el patrón del portal (capturas/grafica-indicador-volumen.png): la línea del indicador suavizada con un
+   área en degradado de su color que se desvanece hacia abajo, las llamadas como columnas grises claras detrás con su cifra
+   pequeña en gris encima, el eje Y ajustado al rango de los datos (no desde 0) y una pastilla en cada punto. Con varios
+   indicadores (la adherencia y sus criterios) lleva pestañas en pastilla encima. Todas las figuras (cada indicador, por
+   semana y por día) se pintan en el servidor y van con `hidden` salvo la elegida: site.js (data-indicadores) enseña la que
+   toca sin recargar. Empieza en el primer indicador y por semanas. Sin líneas de media, meta ni umbrales. *@
+@{
+    var vistas = new (string Clave, string Texto, IReadOnlyList<GrupoGaia> Grupos)[] { ("semana", "Semana", Model.Semanas), ("dia", "Día", Model.Dias) };
+    var primero = Model.Indicadores[0];
+}
+<div class="indicador-volumen" data-indicadores data-indicador="@primero.Clave" data-vista="semana">
+    <div class="indicador-barra">
+        @if (Model.Indicadores.Count > 1)
+        {
+            <div class="pastillas-indicador" role="group" aria-label="Indicador">
+                @foreach (var ind in Model.Indicadores)
+                {
+                    <button type="button" class="segmento@(ind == primero ? " activo" : "")" data-indicador-boton="@ind.Clave">@ind.Nombre</button>
+                }
+            </div>
+        }
+        <div class="pestanas-vista" role="group" aria-label="Periodo de la gráfica">
+            @foreach (var (clave, texto, _) in vistas)
+            {
+                <button type="button" class="segmento@(clave == "semana" ? " activo" : "")" data-ind-vista="@clave">@texto</button>
+            }
+        </div>
+    </div>
+    @foreach (var ind in Model.Indicadores)
+    {
+        foreach (var (vista, _, grupos) in vistas)
+        {
+            var g = Grafico(vista, grupos, (ind.Nombre, "serie-a", ind.Valor)) with { Segundos = ind.Segundos, AnchoEstimado = Model.AnchoEstimado, EjeX = true, ConLeyenda = false, Descripcion = ind.Nombre + " por " + vista };
+            var n = Math.Max(1, g.Etiquetas.Count);
+            var valores = g.Series[0].Valores;
+            var conDato = valores.Where(v => v is not null).Select(v => v!.Value).ToList();
+            var visible = ind == primero && vista == "semana";
+            <div class="indicador-bloque" data-indicador="@ind.Clave" data-vista="@vista" hidden="@(!visible)">
+                <div class="leyenda-ns centrada">
+                    <span class="serie-gris"><i></i>Llamadas</span>
+                    <span class="serie-a"><i></i>@ind.Nombre</span>
+                </div>
+                @if (conDato.Count == 0)
+                {
+                    <p class="vacio corto">Sin datos con estos filtros</p>
+                }
+                else
+                {
+                    var min = conDato.Min();
+                    var max = conDato.Max();
+                    var rango = max - min;
+                    if (rango <= 0) rango = Math.Max(Math.Abs(max) * 0.05, ind.Segundos ? 1 : 0.01);
+                    var bajo = min - rango * 0.1;
+                    var alto = max + rango * 0.1;
+                    double X(int i) => (i + 0.5) / n;
+                    double Y(double v) => 1 - (v - bajo) / (alto - bajo);
+                    var maxVol = Math.Max(1, g.Volumen.DefaultIfEmpty(1).Max());
+                    var ancho = Math.Min(0.05, 0.62 / n);
+                    var (linea, area) = TrazosSuaves(valores.Select(v => v is { } x ? (double?)Y(x) : null).ToList(), X);
+                    var rotulados = Rotulados(g);
+                    var pasoX = Math.Max(1, (int)Math.Ceiling(n / (double)g.MaxEtiquetasX));
+                    var marcas = Enumerable.Range(0, 4).Select(k => bajo + (alto - bajo) * k / 3).ToList();
+                    var idDegradado = $"deg-{Model.Id}-{ind.Clave}-{vista}";
+                <figure class="grafica lineas-ns indicador-fig" role="img" aria-label="@g.Descripcion">
+                <div class="plano">
+                    <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
+                        <defs>
+                            <linearGradient id="@idDegradado" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0" class="degradado-ini" />
+                                <stop offset="1" class="degradado-fin" />
+                            </linearGradient>
+                        </defs>
+                        @foreach (var v in marcas)
+                        {
+                            <line class="rejilla-linea" x1="0" x2="1000" y1="@C(Y(v))" y2="@C(Y(v))" vector-effect="non-scaling-stroke" />
+                        }
+                        @for (var i = 0; i < g.Volumen.Count; i++)
+                        {
+                            var h = 0.34 * g.Volumen[i] / maxVol;
+                            <rect class="columna-gris" data-i="@i" x="@C(X(i) - ancho / 2)" y="@C(1 - h)" width="@C(ancho)" height="@C(h)" vector-effect="non-scaling-stroke" />
+                        }
+                        <path class="indicador-area" d="@area" fill="url(#@idDegradado)" />
+                        <g class="serie-a"><path class="crono-linea" d="@linea" vector-effect="non-scaling-stroke" /></g>
+                        @for (var i = 0; i < g.Etiquetas.Count; i++)
+                        {
+                            <rect class="banda" data-i="@i" data-x="@Formato.Coord(X(i))" x="@C((double)i / n)" y="0" width="@C(1.0 / n)" height="1000"><title>@Ficha(g, i)</title></rect>
+                        }
+                    </svg>
+                    @foreach (var v in marcas)
+                    {
+                        <span class="eje-y" style="top:@P(Y(v))">@Valor(v, g)</span>
+                    }
+                    @for (var i = 0; i < valores.Count; i++)
+                    {
+                        if (valores[i] is not { } v) continue;
+                        if (n <= 45)
+                        {
+                            <span class="punto serie-a" data-i="@i" style="left:@P(X(i));top:@P(Y(v))"></span>
+                        }
+                    }
+                    @for (var i = 0; i < g.Volumen.Count; i++)
+                    {
+                        if (!rotulados.Contains(i)) continue;
+                        <span class="valor-volumen" style="left:@P(X(i));top:@P(1 - 0.34 * g.Volumen[i] / maxVol)">@Formato.Entero(g.Volumen[i])</span>
+                    }
+                    @for (var i = 0; i < valores.Count; i++)
+                    {
+                        if (!rotulados.Contains(i) || valores[i] is not { } v) continue;
+                        <span class="etiqueta-punto serie-a arriba@(i == 0 ? " al-inicio" : i == n - 1 ? " al-final" : "")" style="left:@P(X(i));top:@P(Y(v))">@Valor(v, g)</span>
+                    }
+                    @for (var i = 0; i < g.Etiquetas.Count; i++)
+                    {
+                        if (i == g.Etiquetas.Count - 1 || (i % pasoX == 0 && g.Etiquetas.Count - 1 - i >= pasoX))
+                        {
+                            <span class="eje-x" style="left:@P(X(i))">@g.Etiquetas[i]</span>
+                        }
+                    }
+                </div>
+                </figure>
+                }
+            </div>
+        }
+    }
+</div>

@@ -1,0 +1,336 @@
+@model TableroModelo
+@* «T0 y planes de acción» (debajo de la tira de indicadores, que es la de todas las páginas): auditorías de ICEBERG con
+   Tolerancia 0 frente a su alerta T0 (Legal.Alertas_T0) y su plan de acción (Legal.PlanAccion). Solo piezas que ya
+   existían: .aviso, .crono-tarjeta con _LineasGaia, .hbarras.libre, table.ranking[data-mapa] con TOTAL al pie y .chip. *@
+@{
+    var t = Model.T0!;
+    var f = Model.Filtros;
+    var url = "/" + Model.Pagina.Clave;
+    var porVista = Model.Vista switch { Vista.Dia => "día", Vista.Semana => "semana", _ => "mes" };
+    var tituloEje = Model.Vista switch { Vista.Dia => "Día", Vista.Semana => "Semana", _ => "Mes" };
+    var puntos = t.Evolucion;
+    var grafico = new GraficoGaia(
+        puntos.Select(p => p.Etiqueta).ToList(), puntos.Select(p => p.Detalle).ToList(), puntos.Select(p => p.Cantidad).ToList(),
+        [new SerieGaia("% con plan de acción", "serie-a", puntos.Select(p => p.Nota).ToList())])
+    {
+        NombreVolumen = "Auditorías T0",
+        Dia = Model.Vista == Vista.Dia,
+        AnchoEstimado = 900,
+        MaxEtiquetasX = 14,
+        Descripcion = "% de auditorías T0 con plan de acción por " + porVista,
+    };
+    var maxSituacion = Math.Max(1, t.Situaciones.Select(s => s.Cantidad).DefaultIfEmpty(0).Max());
+    string Pct(int parte, int total) => Formato.Porcentaje(total > 0 ? (double)parte / total : null);
+    var planesMotivo = t.Motivos.Sum(m => m.Cantidad);
+    var planesCalidad = t.Motivos.Where(m => m.Motivo == "Acción de Calidad").Sum(m => m.Cantidad);
+}
+@if (t.Error is { } error)
+{
+    <div class="aviso" role="alert">
+        @Iconos.Svg("alerta")
+        <span>No se pudieron leer las alertas T0 ni los planes de acción; el resto del informe sigue. <small>@error</small></span>
+    </div>
+}
+@foreach (var h in t.Huecos)
+{
+    <div class="aviso" role="note">
+        @Iconos.Svg("alerta")
+        <span>
+            <b>Legal.PlanAccion no tiene ningún plan creado del @Formato.Fecha(h.Desde) al @Formato.Fecha(h.Hasta)</b> (@h.Dias días):
+            los planes de las alertas de esas fechas salen como «Plan sin verificar» aunque estén cargados, y la comparación con
+            «Acción de Calidad» sale baja. Hay que pedir que se recargue esa tabla.
+        </span>
+    </div>
+}
+
+@if (t.Total == 0)
+{
+    <section class="tarjeta">
+        <p class="vacio">Sin auditorías con T0 con estos filtros</p>
+    </section>
+}
+else
+{
+    <section class="tarjeta crono-tarjeta">
+        <header class="tarjeta-cabecera">
+            <h2>Auditorías T0 con plan de acción</h2>
+            <span class="tarjeta-nota">% con plan por @porVista, con las auditorías T0 detrás · la regla pide el 100 %</span>
+        </header>
+        @await Html.PartialAsync("_LineasGaia", grafico)
+        <div class="titulo-eje">@tituloEje</div>
+    </section>
+
+    <div class="rejilla-2">
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>En qué punto está cada auditoría T0</h2>
+                <span class="tarjeta-nota">De la alerta T0 al plan de acción · filtra una con «Situación» en el panel</span>
+            </header>
+            <div class="hbarras libre">
+                @foreach (var s in t.Situaciones)
+                {
+                    var fraccion = Formato.Coord(Math.Max(0.006, (double)s.Cantidad / maxSituacion));
+                    <div class="hbarra" title="@TextosT0.Texto(s.Situacion) · @Formato.Entero(s.Cantidad) · @TextosT0.Explicacion(s.Situacion)@(s.Detalle is null ? "" : " · " + s.Detalle)">
+                        <span class="hbarra-nombre">
+                            <span>@TextosT0.Texto(s.Situacion)</span>
+                            <span class="sub-ns envuelve">@(s.Detalle ?? TextosT0.Explicacion(s.Situacion))</span>
+                        </span>
+                        <span class="hbarra-pista"><span class="hbarra-relleno @TextosT0.Tono(s.Situacion)" style="--fraccion:@fraccion"></span><span class="hbarra-valor">@Formato.Entero(s.Cantidad)</span></span>
+                        <span class="hbarra-media-valor">@Pct(s.Cantidad, t.Total)</span>
+                    </div>
+                }
+            </div>
+            <p class="nota-ns">Cumplen la regla las dos primeras: la alerta T0 se gestionó con «Plan de acción». «Sin verificar» quiere decir que el número de plan de la alerta no está en Legal.PlanAccion.</p>
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Cumplimiento por sector</h2>
+                <span class="tarjeta-nota">Pulsa un sector para filtrar · el semáforo compara el % con plan</span>
+            </header>
+            <div class="tabla-contenedor">
+                <table class="ranking" data-mapa>
+                    <thead>
+                        <tr>
+                            <th scope="col"><button type="button" class="ordenar">Sector</button></th>
+                            <th scope="col" class="num"><button type="button" class="ordenar">T0</button></th>
+                            <th scope="col" class="num"><button type="button" class="ordenar">Con alerta</button></th>
+                            <th scope="col" class="num"><button type="button" class="ordenar">Con plan</button></th>
+                            <th scope="col" class="num" data-sentido="1"><button type="button" class="ordenar">% con plan</button></th>
+                            <th scope="col" class="num"><button type="button" class="ordenar">Sin plan</button></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in t.PorSector)
+                        {
+                            <tr>
+                                <td class="celda-nombre" data-valor="@s.Nombre">
+                                    <a class="nombre-fila" href="@(url + f.Alternar("sector", s.Nombre).Consulta())" data-parcial
+                                       title="@(s.Marcado ? "Pulsa para quitar el filtro" : "Pulsa para filtrar por este sector")"><span class="nombre-texto">@s.Nombre</span></a>
+                                </td>
+                                <td class="num barra-volumen" data-valor="@s.Total">@Formato.Entero(s.Total)</td>
+                                <td class="num" data-valor="@s.ConAlerta">@Formato.Entero(s.ConAlerta)</td>
+                                <td class="num" data-valor="@s.ConPlan" title="@Formato.Entero(s.Verificados) verificados en PlanAccion">@Formato.Entero(s.ConPlan)</td>
+                                <td class="num" data-valor="@Formato.Crudo(s.PctPlan)">@Formato.Porcentaje(s.PctPlan)</td>
+                                <td class="num" data-valor="@s.SinPlan">@Formato.Entero(s.SinPlan)</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="total">
+                            <td>TOTAL</td>
+                            <td class="num">@Formato.Entero(t.Total)</td>
+                            <td class="num">@Formato.Entero(t.ConAlerta)</td>
+                            <td class="num">@Formato.Entero(t.ConPlan)</td>
+                            <td class="num">@Pct(t.ConPlan, t.Total)</td>
+                            <td class="num">@Formato.Entero(t.SinPlan)</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <section class="tarjeta">
+        <header class="tarjeta-cabecera">
+            <h2>Cumplimiento por team</h2>
+            <span class="tarjeta-nota">Primero los que tienen más auditorías T0 sin plan · quien gestiona la alerta y carga el plan suele ser el team leader · pulsa un team para filtrar</span>
+        </header>
+        <div class="tabla-contenedor alta">
+            <table class="ranking con-puesto" data-mapa>
+                <thead>
+                    <tr>
+                        <th scope="col"><button type="button" class="ordenar">Team</button></th>
+                        <th scope="col"><button type="button" class="ordenar">Super</button></th>
+                        <th scope="col" class="num"><button type="button" class="ordenar">T0</button></th>
+                        <th scope="col" class="num"><button type="button" class="ordenar">Con alerta</button></th>
+                        <th scope="col" class="num"><button type="button" class="ordenar">Con plan</button></th>
+                        <th scope="col" class="num" data-sentido="1"><button type="button" class="ordenar">% con plan</button></th>
+                        <th scope="col" class="num" data-sentido="-1"><button type="button" class="ordenar">Sin plan</button></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in t.PorTeam)
+                    {
+                        <tr>
+                            <td class="celda-nombre" data-valor="@s.Nombre">
+                                <a class="nombre-fila" href="@(url + f.Alternar("team", s.Nombre).Consulta())" data-parcial
+                                   title="@(s.Marcado ? "Pulsa para quitar el filtro" : "Pulsa para filtrar por este team")"><span class="nombre-texto">@s.Nombre</span></a>
+                            </td>
+                            <td data-valor="@s.Sub">@(s.Sub ?? CalculadoraTablero.EnBlanco)</td>
+                            <td class="num barra-volumen" data-valor="@s.Total">@Formato.Entero(s.Total)</td>
+                            <td class="num" data-valor="@s.ConAlerta">@Formato.Entero(s.ConAlerta)</td>
+                            <td class="num" data-valor="@s.ConPlan" title="@Formato.Entero(s.Verificados) verificados en PlanAccion">@Formato.Entero(s.ConPlan)</td>
+                            <td class="num" data-valor="@Formato.Crudo(s.PctPlan)">@Formato.Porcentaje(s.PctPlan)</td>
+                            <td class="num" data-valor="@s.SinPlan">@Formato.Entero(s.SinPlan)</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr class="total">
+                        <td>TOTAL</td>
+                        <td>@Formato.Entero(t.PorTeam.Count) teams</td>
+                        <td class="num">@Formato.Entero(t.Total)</td>
+                        <td class="num">@Formato.Entero(t.ConAlerta)</td>
+                        <td class="num">@Formato.Entero(t.ConPlan)</td>
+                        <td class="num">@Pct(t.ConPlan, t.Total)</td>
+                        <td class="num">@Formato.Entero(t.SinPlan)</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </section>
+
+    <div class="rejilla-2">
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Motivo con el que se cargó el plan</h2>
+                <span class="tarjeta-nota">Planes verificados en Legal.PlanAccion · «Acción de Calidad» es el motivo 1020 y «Tolerancia Cero», el 1051</span>
+            </header>
+            @if (t.Motivos.Count == 0)
+            {
+                <p class="vacio">Ningún plan verificado con estos filtros</p>
+            }
+            else
+            {
+                <div class="tabla-contenedor">
+                    <table class="ranking">
+                        <thead>
+                            <tr>
+                                <th scope="col"><button type="button" class="ordenar">Motivo del plan</button></th>
+                                <th scope="col" class="num"><button type="button" class="ordenar">Planes</button></th>
+                                <th scope="col" class="num"><button type="button" class="ordenar">% de los verificados</button></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var (motivo, cantidad) in t.Motivos)
+                            {
+                                <tr>
+                                    <td class="celda-nombre" data-valor="@motivo"><div class="nombre-fila"><span class="nombre-texto">@motivo</span></div></td>
+                                    <td class="num barra-volumen" data-valor="@cantidad">@Formato.Entero(cantidad)</td>
+                                    <td class="num" data-valor="@Formato.Crudo((double)cantidad / planesMotivo)">@Pct(cantidad, planesMotivo)</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr class="total">
+                                <td>TOTAL</td>
+                                <td class="num">@Formato.Entero(planesMotivo)</td>
+                                <td class="num">@Pct(planesMotivo, planesMotivo)</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Plan de la alerta frente a «Acción de Calidad»</h2>
+                <span class="tarjeta-nota">«Acción de Calidad»: un plan con ese motivo del mismo agente creado entre el día de la auditoría y 15 días después, sin pasar por la alerta</span>
+            </header>
+            <div class="tabla-contenedor">
+                <table class="ranking">
+                    <thead>
+                        <tr>
+                            <th scope="col">Según la alerta T0</th>
+                            <th scope="col" class="num">Con plan «Acción de Calidad»</th>
+                            <th scope="col" class="num">Sin él</th>
+                            <th scope="col" class="num">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="celda-nombre"><div class="nombre-fila"><span class="nombre-texto">Con plan de acción</span></div></td>
+                            <td class="num">@Formato.Entero(t.AmbosPlanes)</td>
+                            <td class="num">@Formato.Entero(t.SoloAlerta)</td>
+                            <td class="num">@Formato.Entero(t.AmbosPlanes + t.SoloAlerta)</td>
+                        </tr>
+                        <tr>
+                            <td class="celda-nombre"><div class="nombre-fila"><span class="nombre-texto">Sin plan de acción</span></div></td>
+                            <td class="num">@Formato.Entero(t.SoloCalidad)</td>
+                            <td class="num">@Formato.Entero(t.NingunPlan)</td>
+                            <td class="num">@Formato.Entero(t.SoloCalidad + t.NingunPlan)</td>
+                        </tr>
+                    </tbody>
+                    <tfoot>
+                        <tr class="total">
+                            <td>TOTAL</td>
+                            <td class="num">@Formato.Entero(t.AmbosPlanes + t.SoloCalidad)</td>
+                            <td class="num">@Formato.Entero(t.SoloAlerta + t.NingunPlan)</td>
+                            <td class="num">@Formato.Entero(t.Total)</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <p class="nota-ns">
+                Calidad dijo que las T0 se cargarían como plan «Acción de Calidad». @Formato.Entero(t.SoloCalidad) auditorías sin plan en la alerta sí
+                tienen uno de esos planes cerca de la fecha (es un cruce por agente y fecha, no exacto), y @Formato.Entero(t.SoloAlerta) con plan en la
+                alerta no lo tienen.
+                @if (planesMotivo > 0)
+                {
+                    <text>De los planes verificados, solo el @Pct(planesCalidad, planesMotivo) se cargó con el motivo «Acción de Calidad» (tabla de la izquierda).</text>
+                }
+            </p>
+        </section>
+    </div>
+
+    <section class="tarjeta">
+        <header class="tarjeta-cabecera">
+            <h2>Detalle de auditorías T0</h2>
+            <span class="tarjeta-nota">Primero las que no tienen plan, de la más reciente a la más antigua · @(t.DetalleTotal > t.Detalle.Count ? $"se ven {Formato.Entero(t.Detalle.Count)} de {Formato.Entero(t.DetalleTotal)}; el Excel lleva todas" : "el Excel lleva además la alerta y el plan completos")</span>
+        </header>
+        <div class="tabla-contenedor alta">
+            <table class="ranking">
+                <thead>
+                    <tr>
+                        <th scope="col"><button type="button" class="ordenar">Agente</button></th>
+                        <th scope="col"><button type="button" class="ordenar">Auditoría</button></th>
+                        <th scope="col"><button type="button" class="ordenar">Situación</button></th>
+                        <th scope="col"><button type="button" class="ordenar">Acción / plan</button></th>
+                        <th scope="col"><button type="button" class="ordenar">Infracción</button></th>
+                        <th scope="col"><button type="button" class="ordenar">Team</button></th>
+                        <th scope="col"><button type="button" class="ordenar">Plantilla</button></th>
+                        <th scope="col"><button type="button" class="ordenar">Auditor</button></th>
+                        <th scope="col"><button type="button" class="ordenar">ID llamada</button></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var a in t.Detalle)
+                    {
+                        <tr>
+                            <td class="celda-nombre" data-valor="@a.Agente">
+                                <div class="nombre-fila">
+                                    <span class="nombre-texto">@(a.Agente ?? CalculadoraTablero.EnBlanco)</span>
+                                    @if (a.Legajo is { } legajo)
+                                    {
+                                        <span class="pastilla-dato" title="Legajo">@legajo</span>
+                                    }
+                                </div>
+                            </td>
+                            <td data-valor="@a.Fecha.ToString("yyyy-MM-dd")">@Formato.Fecha(a.Fecha)</td>
+                            <td data-valor="@((int)a.Situacion)" title="@TextosT0.Explicacion(a.Situacion)"><span class="chip @TextosT0.Chip(a.Situacion)">@TextosT0.Texto(a.Situacion)</span></td>
+                            <td title="@(a.IdAlerta is { } ida ? $"Alerta {ida} · encontrada por {a.Cruce?.ToLowerInvariant()}" + (a.FechaReporteT0 is { } fr ? $" · reportada el {Formato.FechaHora(fr)}" : "") : "Sin alerta T0")">@TextosT0.Accion(a)</td>
+                            <td title="@a.Infraccion">@TextosT0.Corto(a.Infraccion)</td>
+                            <td>@(a.Team ?? CalculadoraTablero.EnBlanco)</td>
+                            <td>@(a.Plantilla ?? CalculadoraTablero.EnBlanco)</td>
+                            <td title="@a.CargoAuditor">@(a.NombreAuditor ?? CalculadoraTablero.EnBlanco)</td>
+                            <td>@(a.IdLlamada ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="tarjeta">
+        <header class="tarjeta-cabecera"><h2>Cómo se une cada auditoría con su plan</h2></header>
+        <ul class="lista-ns">
+            <li><b>Auditoría con T0</b>: ICEBERG, <code>Calidad.PlantillaCalidadUnificada</code> con la columna «Tolerancia 0» rellena (ni vacía ni «N/A»). Los formularios WEB (WhatsApp, Jazztel, Orange) no tienen campo de T0 y no entran.</li>
+            <li><b>ID de la llamada</b>: no está en PlantillaCalidadUnificada; sale de las respuestas de la plantilla (<code>PlanillaRespuestasP</code> y <code>PlanillaPreguntasP</code>: «Call ID», «ID llamada», «ID de Grabación», «ID Conversacion»).</li>
+            <li><b>Alerta T0</b> (<code>RecursosHumanos.Legal.Alertas_T0</code>): primero por el mismo ID de llamada; si no, el mismo agente y el mismo auditor con la alerta reportada entre 1 día antes y 15 después de la auditoría.</li>
+            <li><b>Plan de acción</b>: la alerta dice la acción («Plan de acción», «Registro de Falta», «Agente dado de baja»…) y el número del plan (<code>ID_Accion</code>), que es el <code>IdPlanDeAccion</code> de <code>Legal.PlanAccion</code>.</li>
+            <li><b>«Acción de Calidad»</b> no es una columna: es un motivo del plan (<code>PlanAccionMotivos</code> 1020) que se elige al cargarlo en PlanAccion. Es el motivo más usado de todos, no solo para las T0.</li>
+        </ul>
+    </section>
+}

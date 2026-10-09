@@ -1,0 +1,107 @@
+@model RespuestaResumen
+@* Encuestas recogidas cada día, en el estilo único de las gráficas de línea (07-10-2026, «indicador + volumen» del portal): la línea
+   de encuestadas suavizada con su área en degradado, las llamadas entrantes de cada día como columnas grises claras detrás, en el
+   mismo plano, con su cifra pequeña gris encima, el eje Y ajustado al rango de los datos y una pastilla en cada punto (uno de cada
+   pocos con tantos días, siempre el primero y el último; la de un día parcial, en gris). Los tramos que tocan un día parcial van
+   rectos y discontinuos. Cada día lleva una banda con su <title> para la ficha. Sin líneas de media. *@
+@{
+    var serie = Model.Serie;
+    var n = Math.Max(1, serie.Count);
+    var datos = serie.Where(x => x.Encuestadas > 0).Select(x => (double)x.Encuestadas).ToList();
+    var minD = datos.DefaultIfEmpty(0).Min();
+    var maxD = datos.DefaultIfEmpty(1).Max();
+    var rango = Math.Max(maxD - minD, Math.Max(maxD * 0.05, 1));
+    var bajo = Math.Max(0, minD - rango * 0.1);
+    var alto = maxD + rango * 0.1;
+    double X(int i) => (i + 0.5) / n;
+    double Y(double v) => 1 - (v - bajo) / (alto - bajo);
+    var ancho = Math.Min(0.05, 0.62 / n);
+    string C(double fr) => Formato.Coord(fr * 1000);
+    string P(double fr) => Formato.Coord(fr * 100) + "%";
+    var pasoX = Math.Max(1, (int)Math.Ceiling(n / 12.0));
+    var rotulados = Rotulados(new GraficoGaia(serie.Select(x => x.Dia).ToList(), serie.Select(x => x.Dia).ToList(), Array.Empty<int>(), Array.Empty<SerieGaia>()) { Entero = true, Dia = true, AnchoEstimado = 420 });
+    var maxVol = Math.Max(1, serie.Select(x => (double)x.Llamadas).DefaultIfEmpty(1).Max());
+    var marcas = Enumerable.Range(0, 4).Select(m => bajo + (alto - bajo) * m / 3).ToList();
+    var (suave, areaSuave) = TrazosSuaves(serie.Select((x, i) => x.Encuestadas > 0 && !x.Parcial ? (double?)Y(x.Encuestadas) : null).ToList(), X);
+    var discontinuo = new System.Text.StringBuilder();
+    for (var i = 0; i + 1 < serie.Count; i++)
+    {
+        if (serie[i].Encuestadas <= 0 || serie[i + 1].Encuestadas <= 0 || !(serie[i].Parcial || serie[i + 1].Parcial)) continue;
+        discontinuo.Append($"M{C(X(i))},{C(Y(serie[i].Encuestadas))} L{C(X(i + 1))},{C(Y(serie[i + 1].Encuestadas))} ");
+    }
+    var idDegradado = "deg-enc-" + n;
+}
+<div class="leyenda-ns centrada">
+    <span class="serie-gris"><i></i>Llamadas entrantes</span>
+    <span class="serie-a"><i></i>Encuestadas</span>
+    @if (serie.Any(x => x.Parcial))
+    {
+        <span class="serie-otra"><i></i>día parcial</span>
+    }
+</div>
+<figure class="grafica lineas-ns indicador-fig" role="img" aria-label="Encuestas recogidas cada día">
+    <div class="plano">
+        <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
+            <g class="serie-a">
+                <defs>
+                    <linearGradient id="@idDegradado" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" class="degradado-ini" />
+                        <stop offset="1" class="degradado-fin" />
+                    </linearGradient>
+                </defs>
+            </g>
+            @foreach (var v in marcas)
+            {
+                <line class="rejilla-linea" x1="0" x2="1000" y1="@C(Y(v))" y2="@C(Y(v))" vector-effect="non-scaling-stroke" />
+            }
+            @for (var i = 0; i < serie.Count; i++)
+            {
+                var h = 0.34 * serie[i].Llamadas / maxVol;
+                <rect class="columna-gris" data-i="@i" x="@C(X(i) - ancho / 2)" y="@C(1 - h)" width="@C(ancho)" height="@C(h)" vector-effect="non-scaling-stroke" />
+            }
+            <path class="indicador-area" d="@areaSuave" fill="url(#@idDegradado)" />
+            <g class="serie-a">
+                <path class="crono-linea" d="@suave" vector-effect="non-scaling-stroke" />
+                @if (discontinuo.Length > 0)
+                {
+                    <path class="crono-linea discontinua" d="@discontinuo" vector-effect="non-scaling-stroke" />
+                }
+            </g>
+            @for (var i = 0; i < serie.Count; i++)
+            {
+                var x = serie[i];
+                <rect class="banda" data-i="@i" data-x="@Formato.Coord(X(i))" x="@C((double)i / n)" y="0" width="@C(1.0 / n)" height="1000"><title>@FormatoNoSolucion.FechaLarga(x.Dia)@(x.Parcial ? " (parcial)" : "") · Encuestadas @FormatoNoSolucion.Int(x.Encuestadas) · No solucionadas @FormatoNoSolucion.Int(x.Nosol) · Llamadas @FormatoNoSolucion.Int(x.Llamadas)</title></rect>
+            }
+        </svg>
+        @foreach (var v in marcas)
+        {
+            <span class="eje-y" style="top:@P(Y(v))">@FormatoNoSolucion.Int(v)</span>
+        }
+        @if (n <= 45)
+        {
+            for (var i = 0; i < serie.Count; i++)
+            {
+                if (serie[i].Encuestadas <= 0) continue;
+                <span class="punto @(serie[i].Parcial ? "serie-otra" : "serie-a")" data-i="@i" style="left:@P(X(i));top:@P(Y(serie[i].Encuestadas))"></span>
+            }
+        }
+        @for (var i = 0; i < serie.Count; i++)
+        {
+            if (!rotulados.Contains(i)) continue;
+            <span class="valor-volumen" style="left:@P(X(i));top:@P(1 - 0.34 * serie[i].Llamadas / maxVol)">@FormatoNoSolucion.Int(serie[i].Llamadas)</span>
+        }
+        @for (var i = 0; i < serie.Count; i++)
+        {
+            var x = serie[i];
+            if (!rotulados.Contains(i) || x.Encuestadas <= 0) continue;
+            <span class="etiqueta-punto @(x.Parcial ? "serie-otra" : "serie-a") arriba@(i == 0 ? " al-inicio" : i == serie.Count - 1 ? " al-final" : "")" style="left:@P(X(i));top:@P(Y(x.Encuestadas))">@FormatoNoSolucion.Int(x.Encuestadas)</span>
+        }
+        @for (var i = 0; i < serie.Count; i++)
+        {
+            if (i == serie.Count - 1 || (i % pasoX == 0 && serie.Count - 1 - i >= pasoX))
+            {
+                <span class="eje-x" style="left:@P(X(i))">@FormatoNoSolucion.Fecha(serie[i].Dia)</span>
+            }
+        }
+    </div>
+</figure>

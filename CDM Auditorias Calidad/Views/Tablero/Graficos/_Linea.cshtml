@@ -1,0 +1,27 @@
+@model TableroModelo
+@* «Nota promedio de calidad»: línea con las piezas comunes de las gráficas (_LineasGaia): leyenda arriba (sin la «Meta de
+   Calidad»: ya no hay líneas de meta), cada punto con su valor en una pastilla y una
+   banda por periodo con su <title> para la ficha («Etiqueta · Nota X % · Auditorías N»). *@
+@{
+    var puntos = Model.Evolucion;
+    var tituloEje = Model.Vista switch { Vista.Dia => "Día", Vista.Semana => "Semana", _ => "Mes" };
+    var grafico = new GraficoGaia(
+        puntos.Select(p => p.Etiqueta).ToList(), puntos.Select(p => p.Detalle).ToList(), puntos.Select(p => p.Cantidad).ToList(),
+        [new SerieGaia("Nota promedio", "serie-a", puntos.Select(p => p.Nota).ToList())])
+    {
+        NombreVolumen = "Auditorías",
+        Dia = Model.Vista == Vista.Dia,
+        AnchoEstimado = 900,
+        MaxEtiquetasX = 14,
+        Descripcion = "Nota promedio de calidad por " + tituloEje.ToLowerInvariant(),
+    };
+}
+@if (!puntos.Any(p => p.Nota is not null))
+{
+    <p class="vacio">Sin notas con estos filtros</p>
+}
+else
+{
+    @await Html.PartialAsync("_LineasGaia", grafico)
+    <div class="titulo-eje">@tituloEje</div>
+}

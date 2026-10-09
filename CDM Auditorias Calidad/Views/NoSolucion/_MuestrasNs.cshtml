@@ -1,0 +1,46 @@
+@model MuestrasNs
+@* Llamadas de ejemplo de un desglose (una tipología o un impedimento): fecha, marca, servicio, agente,
+   avería, el texto de la llamada y su ID (el conversationId de GAMMA) con botón de copiar; arriba,
+   exportar todas las del desglose. *@
+@if (Model.Muestras.Count == 0)
+{
+    <p class="nota-ns">@Model.SinTexto</p>
+}
+else
+{
+    <div class="muestras-ns">
+        <div class="muestras-ns-cabecera">
+            <h3>@Model.Titulo</h3>
+            <a class="boton-secundario pequeno" href="@Model.UrlCsv"
+               title="Todas las llamadas no solucionadas de este desglose, con su ID, en CSV para Excel">
+                @Iconos.Svg("hoja")
+                @(Model.Total == 1 ? "Exportar la llamada (CSV)" : $"Exportar las {FormatoNoSolucion.Int(Model.Total)} llamadas (CSV)")
+            </a>
+        </div>
+        <p class="nota-ns">@Model.Explicacion</p>
+        @foreach (var m in Model.Muestras)
+        {
+            <blockquote class="muestra-ns">
+                <span class="muestra-ns-cabecera">
+                    @FormatoNoSolucion.FechaLarga(m.Dia) · @m.Marca · @m.Servicio · @m.Agente@(m.Averia is not null ? " · " + m.Averia : "")
+                    @if (m.Causa is not null)
+                    {
+                        <span class="muestra-ns-causa">· causa: <b>@m.Causa</b></span>
+                    }
+                </span>
+                <span class="muestra-ns-texto">@m.Texto</span>
+                @if (Model.VerImpedimentos && m.Impedimentos.Count > 0)
+                {
+                    <span class="muestra-ns-imp">Impedimentos: @string.Join(" · ", m.Impedimentos)</span>
+                }
+                @if (!string.IsNullOrEmpty(m.Conversacion))
+                {
+                    <span class="muestra-ns-id">
+                        <span>ID de llamada <b>@m.Conversacion</b></span>
+                        <button type="button" class="enlace" data-copiar="@m.Conversacion">@Iconos.Svg("copiar") Copiar ID</button>
+                    </span>
+                }
+            </blockquote>
+        }
+    </div>
+}

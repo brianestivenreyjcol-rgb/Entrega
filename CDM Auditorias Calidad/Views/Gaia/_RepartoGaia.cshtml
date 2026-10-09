@@ -1,0 +1,34 @@
+@model (IReadOnlyList<RepartoGaia> Filas, string Tono, bool Largo)
+@* Un reparto en barras horizontales con la pieza de la guía (.hbarras.libre > .hbarra): el nombre, la barra con su
+   porcentaje y, a la derecha, las llamadas. El largo es la fracción frente a la mayor (--fraccion). Con Largo
+   (temas, obstáculos: texto de DataOrb) el nombre ocupa varias líneas en vez de cortarse con «…». *@
+@{
+    // «Otros» (lo que pasa del tope) puede ser casi todo: no cuenta para la escala y, si domina, va sin barra.
+    var maximo = Math.Max(1e-9, Model.Filas.Where(f => f.Texto != "Otros").Select(f => f.Fraccion).DefaultIfEmpty(0).Max());
+}
+@if (Model.Filas.Count == 0)
+{
+    <p class="nota-ns">Sin datos con estos filtros.</p>
+}
+else
+{
+    <div class="hbarras libre@(Model.Largo ? " largo" : "")">
+        @foreach (var f in Model.Filas)
+        {
+            <div class="hbarra" title="@f.Texto · Llamadas @Formato.Entero(f.Cantidad) · Porcentaje @Formato.Porcentaje(f.Fraccion)">
+                <span class="hbarra-nombre"><span>@f.Texto</span></span>
+                <span class="hbarra-pista">
+                    @if (f.Texto == "Otros" && f.Fraccion > maximo)
+                    {
+                        <span class="hbarra-valor texto-tenue">@Formato.Porcentaje(f.Fraccion)</span>
+                    }
+                    else
+                    {
+                        <span class="hbarra-relleno @Model.Tono" style="--fraccion:@Formato.Coord(Math.Clamp(f.Fraccion / maximo, 0.006, 1))"></span><span class="hbarra-valor">@Formato.Porcentaje(f.Fraccion)</span>
+                    }
+                </span>
+                <span class="hbarra-media-valor">@Formato.Entero(f.Cantidad)</span>
+            </div>
+        }
+    </div>
+}

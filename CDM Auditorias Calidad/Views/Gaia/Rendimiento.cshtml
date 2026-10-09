@@ -1,0 +1,197 @@
+@model PaginaRendimientoGaia
+@* Rendimiento: cuánto duran las llamadas (TMO), cuántas son muy cortas o no tienen contexto suficiente y cómo cambia
+   por semana (al abrir) o por día, por etapa de formación; y los agentes de mayor a menor TMO. Cada tabla lleva su
+   TOTAL al pie. «Llamadas cortadas» no está: el dato no existe en DataOrb. *@
+@{
+    Layout = "_InformeGaia";
+}
+@if (!Model.Preparando)
+{
+    var t = Model.Total!;
+    if (t.Llamadas == 0)
+    {
+        <p class="vacio">Ninguna llamada cumple estos filtros.</p>
+    }
+    else
+    {
+        var cortas = new (string, string, Func<IndicadoresGaia, double?>)[]
+        {
+            ("Cortas (<60 s)", "serie-a", i => i.Menores60), ("Sin contexto", "serie-b", i => i.SinContexto),
+        };
+        GraficoGaia Tmo(string escala, IReadOnlyList<GrupoGaia> grupos)
+            => Grafico(escala, grupos, ("TMO", "serie-a", i => i.Tmo)) with { Segundos = true, Descripcion = "TMO por " + escala };
+        GraficoGaia Cortas(string escala, IReadOnlyList<GrupoGaia> grupos)
+            => Grafico(escala, grupos, cortas) with { Descripcion = "Llamadas cortas y sin contexto" };
+
+        <section class="resumen" aria-label="Indicadores de rendimiento">
+            <div class="resumen-dato destacada" title="Duración media de las llamadas (tiempo medio de operación)">
+                <span class="resumen-icono">@Iconos.Svg("reloj")</span>
+                <span class="resumen-titulo">TMO</span>
+                <span class="resumen-cifra">@Duracion(t.Tmo)</span>
+                <span class="resumen-variacion neutra">min:seg por llamada</span>
+            </div>
+            <div class="resumen-dato" title="Llamadas de menos de un minuto sobre todas las del filtro">
+                <span class="resumen-icono">@Iconos.Svg("baja")</span>
+                <span class="resumen-titulo">Menos de 1 min</span>
+                <span class="resumen-cifra" data-contar="@Formato.Crudo(t.Menores60)" data-formato="porcentaje">@Formato.Porcentaje(t.Menores60)</span>
+                <span class="resumen-variacion neutra">llamadas cortas</span>
+            </div>
+            <div class="resumen-dato" title="Llamadas de uno a tres minutos sobre todas las del filtro">
+                <span class="resumen-icono">@Iconos.Svg("igual")</span>
+                <span class="resumen-titulo">De 1 a 3 min</span>
+                <span class="resumen-cifra" data-contar="@Formato.Crudo(t.Entre60y180)" data-formato="porcentaje">@Formato.Porcentaje(t.Entre60y180)</span>
+                <span class="resumen-variacion neutra">entre 60 y 180 segundos</span>
+            </div>
+            <div class="resumen-dato" title="Llamadas en las que DataOrb no tuvo contexto suficiente para clasificarlas">
+                <span class="resumen-icono">@Iconos.Svg("alerta")</span>
+                <span class="resumen-titulo">Sin contexto</span>
+                <span class="resumen-cifra" data-contar="@Formato.Crudo(t.SinContexto)" data-formato="porcentaje">@Formato.Porcentaje(t.SinContexto)</span>
+                <span class="resumen-variacion neutra">contexto insuficiente</span>
+            </div>
+            <div class="resumen-dato" title="@CalculadoraGaia.Kpi("rellamada").Ayuda">
+                <span class="resumen-icono">@Iconos.Svg("refrescar")</span>
+                <span class="resumen-titulo">Rellamada 72 h</span>
+                <span class="resumen-cifra" data-contar="@Formato.Crudo(t.Rellamada72)" data-formato="porcentaje">@Formato.Porcentaje(t.Rellamada72)</span>
+                <span class="resumen-variacion neutra">menos es mejor</span>
+            </div>
+        </section>
+
+        <section class="tarjeta" data-vistas>
+            <header class="tarjeta-cabecera">
+                <h2>TMO</h2>
+                <partial name="_SelectorVistaGaia" />
+            </header>
+            <div data-vista="semana">
+                @await Html.PartialAsync("_LineasGaia", Tmo("semana", Model.PorSemana))
+            </div>
+            <div data-vista="dia" hidden>
+                @await Html.PartialAsync("_LineasGaia", Tmo("dia", Model.PorDia))
+            </div>
+        </section>
+
+        <section class="tarjeta" data-vistas>
+            <header class="tarjeta-cabecera">
+                <h2>Llamadas cortas y sin contexto</h2>
+                <partial name="_SelectorVistaGaia" />
+            </header>
+            <div data-vista="semana">@await Html.PartialAsync("_LineasGaia", Cortas("semana", Model.PorSemana))</div>
+            <div data-vista="dia" hidden>@await Html.PartialAsync("_LineasGaia", Cortas("dia", Model.PorDia))</div>
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>TMO por etapa</h2>
+                <span class="tarjeta-nota">de la preconexión al aseguramiento</span>
+            </header>
+            @await Html.PartialAsync("_ColumnasGaia", Grafico("etapa", Model.PorEtapa, ("TMO", "serie-a", i => i.Tmo)) with { Segundos = true, Descripcion = "TMO por etapa de formación" })
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Cortas y sin contexto por etapa</h2>
+                <span class="tarjeta-nota">% de las llamadas</span>
+            </header>
+            @await Html.PartialAsync("_ColumnasGaia", Grafico("etapa", Model.PorEtapa, cortas) with { Descripcion = "Llamadas cortas y sin contexto por etapa" })
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Por semana</h2>
+                <span class="tarjeta-nota">semanas de lunes a domingo</span>
+            </header>
+            <div class="tabla-contenedor alta">
+                <table class="ranking tabla-rendimiento-gaia">
+                    <thead>
+                        <tr>
+                            <th scope="col"><span class="cab-columna">Semana</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Llamadas</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">TMO</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Menos de 60 s</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">60–180 s</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Sin contexto</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Rellamada</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var g in Model.PorSemana)
+                        {
+                            var i = g.Indicadores;
+                            <tr>
+                                <td>@g.Texto</td>
+                                <td class="num barra-volumen" data-valor="@i.Llamadas">@Formato.Entero(i.Llamadas)</td>
+                                <td class="num">@Duracion(i.Tmo)</td>
+                                <td class="num">@Formato.Porcentaje(i.Menores60)</td>
+                                <td class="num">@Formato.Porcentaje(i.Entre60y180)</td>
+                                <td class="num">@Formato.Porcentaje(i.SinContexto)</td>
+                                <td class="num">@Formato.Porcentaje(i.Rellamada72)</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="total">
+                            <td>TOTAL</td>
+                            <td class="num">@Formato.Entero(t.Llamadas)</td>
+                            <td class="num">@Duracion(t.Tmo)</td>
+                            <td class="num">@Formato.Porcentaje(t.Menores60)</td>
+                            <td class="num">@Formato.Porcentaje(t.Entre60y180)</td>
+                            <td class="num">@Formato.Porcentaje(t.SinContexto)</td>
+                            <td class="num">@Formato.Porcentaje(t.Rellamada72)</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Agentes por TMO</h2>
+                <span class="tarjeta-nota">@Formato.Entero(Model.Agentes.Count) agentes, de mayor a menor TMO</span>
+            </header>
+            
+            <div class="tabla-contenedor alta">
+                <table class="ranking con-puesto tabla-rendimiento-gaia">
+                    <colgroup>
+                        <col style="width:27%" /><col style="width:11%" /><col style="width:11%" /><col style="width:13%" /><col style="width:12%" /><col style="width:13%" /><col style="width:13%" />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th scope="col"><span class="cab-columna">Agente</span></th>
+                            <th scope="col" class="num" aria-sort="descending"><span class="cab-columna">TMO</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Llamadas</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Menos de 60 s</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">60–180 s</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Sin contexto</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Rellamada</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var fila in Model.Agentes)
+                        {
+                            var i = fila.Indicadores;
+                            <tr>
+                                <td class="celda-nombre" title="@fila.Agente · @fila.Sector · oleada @fila.Oleada"><div class="nombre-fila"><span class="nombre-texto">@fila.Agente</span><span class="pastilla-dato" title="Oleada @fila.Oleada">@fila.Oleada</span></div></td>
+                                <td class="num">@Duracion(i.Tmo)</td>
+                                <td class="num barra-volumen" data-valor="@i.Llamadas">@Formato.Entero(i.Llamadas)</td>
+                                <td class="num">@Formato.Porcentaje(i.Menores60)</td>
+                                <td class="num">@Formato.Porcentaje(i.Entre60y180)</td>
+                                <td class="num">@Formato.Porcentaje(i.SinContexto)</td>
+                                <td class="num">@Formato.Porcentaje(i.Rellamada72)</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="total">
+                            <td>TOTAL</td>
+                            <td class="num">@Duracion(t.Tmo)</td>
+                            <td class="num">@Formato.Entero(t.Llamadas)</td>
+                            <td class="num">@Formato.Porcentaje(t.Menores60)</td>
+                            <td class="num">@Formato.Porcentaje(t.Entre60y180)</td>
+                            <td class="num">@Formato.Porcentaje(t.SinContexto)</td>
+                            <td class="num">@Formato.Porcentaje(t.Rellamada72)</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+    }
+}

@@ -1,0 +1,241 @@
+@model PaginaEspanolizacionGaia
+@* Españolización («Españolización» y sus niveles Novato, Aficionado y Experto del PBI): si el agente habla como en España
+   o como en Colombia. Solo cuenta lo que dice el agente. Lo deseable es España alto y Colombia bajo. Las palabras que
+   sustituyen a la nube del PBI son barras. El nivel es un selector de enlaces (?nivel=; «Todas» se quita de la URL). *@
+@{
+    Layout = "_InformeGaia";
+}
+@if (!Model.Preparando)
+{
+    var t = Model.Total!;
+    var r = Model.Resumen;
+    var niveles = new List<(int Valor, string Texto)> { (0, "Todas") };
+    for (var n = 1; n <= Model.Niveles.Count; n++) niveles.Add((n, Model.NombreNivel(n)));
+
+    <div class="pestanas-vista selector-nivel" role="group" aria-label="Nivel de la españolización">
+        <span class="pestanas-etiqueta">Nivel</span>
+        @foreach (var (valor, texto) in niveles)
+        {
+            <a class="segmento@(valor == Model.Nivel ? " activo" : "")" href="@Model.UrlCon(("nivel", valor == 0 ? null : valor.ToString()))" data-parcial
+               aria-current="@(valor == Model.Nivel ? "true" : null)">@texto</a>
+        }
+    </div>
+
+    if (r is null || r.Base == 0)
+    {
+        <section class="tarjeta">
+            <p class="vacio corto">
+                @if (Model.AvisosCarga.Count > 0)
+                {
+                    @:No hay datos de españolización: no se pudieron traer las transcripciones (el aviso de arriba dice por qué).
+                }
+                else if (t.Llamadas == 0)
+                {
+                    @:Ninguna llamada cumple estos filtros.
+                }
+                else
+                {
+                    @:Ninguna llamada de estos filtros tiene transcripción con el agente identificado.
+                }
+            </p>
+        </section>
+    }
+    else
+    {
+        var maxPar = Math.Max(1e-9, Model.Pares.SelectMany(p => new[] { p.Espana ?? 0, p.Colombia ?? 0 }).DefaultIfEmpty(0).Max());
+        var etapa = GraficoEspanolizacion("etapa", Model.PorEtapa) with { Descripcion = "Españolización por etapa de formación" };
+        GraficoGaia PorTiempo(string escala, IReadOnlyList<GrupoEspanolizacion> grupos)
+            => GraficoEspanolizacion(escala, grupos) with { Descripcion = "Españolización por " + escala };
+        IReadOnlyList<RepartoGaia> Palabras(bool espana)
+            => Model.Palabras.Where(p => p.Palabra.EsEspana == espana && p.Llamadas > 0)
+                .Select(p => new RepartoGaia(p.Palabra.Texto, p.Llamadas, p.Fraccion ?? 0)).ToList();
+        var sinUsoEspana = Model.Palabras.Count(p => p.Palabra.EsEspana && p.Llamadas == 0);
+        var sinUsoColombia = Model.Palabras.Count(p => !p.Palabra.EsEspana && p.Llamadas == 0);
+
+        <section class="resumen en-4" aria-label="Indicadores de españolización">
+            <div class="resumen-dato destacada" title="Llamadas en las que el agente dijo alguna palabra de España, sobre las que tienen transcripción y agente identificado">
+                <span class="resumen-icono">@Iconos.Svg("diana")</span>
+                <span class="resumen-titulo">Dicen palabras de España</span>
+                <span class="resumen-cifra" data-contar="@Formato.Crudo(r.Espana)" data-formato="porcentaje">@Formato.Porcentaje(r.Espana)</span>
+                <span class="resumen-variacion neutra">más alto es mejor · @Formato.Entero(r.LlamadasEspana) llamadas</span>
+            </div>
+            <div class="resumen-dato" title="Llamadas en las que el agente dijo alguna palabra de Colombia, sobre las que tienen transcripción y agente identificado">
+                <span class="resumen-icono">@Iconos.Svg("alerta")</span>
+                <span class="resumen-titulo">Dicen palabras de Colombia</span>
+                <span class="resumen-cifra" data-contar="@Formato.Crudo(r.Colombia)" data-formato="porcentaje">@Formato.Porcentaje(r.Colombia)</span>
+                <span class="resumen-variacion neutra">más bajo es mejor · @Formato.Entero(r.LlamadasColombia) llamadas</span>
+            </div>
+            <div class="resumen-dato" title="Llamadas con transcripción en las que se supo qué hablante era el agente: la base de los dos porcentajes">
+                <span class="resumen-icono">@Iconos.Svg("telefono")</span>
+                <span class="resumen-titulo">Llamadas analizadas</span>
+                <span class="resumen-cifra" data-contar="@r.Base" data-formato="entero">@Formato.Entero(r.Base)</span>
+                <span class="resumen-variacion neutra">base de los porcentajes</span>
+            </div>
+            <div class="resumen-dato" title="Llamadas del filtro que están en la tabla de transcripciones">
+                <span class="resumen-icono">@Iconos.Svg("portapapeles")</span>
+                <span class="resumen-titulo">Con transcripción</span>
+                <span class="resumen-cifra" data-contar="@r.ConTranscripcion" data-formato="entero">@Formato.Entero(r.ConTranscripcion)</span>
+                <span class="resumen-variacion neutra">de @Formato.Entero(r.Llamadas) llamadas</span>
+            </div>
+        </section>
+
+        <p class="nota-ns nota-suelta">
+            Solo cuenta lo que dice el agente: en cada llamada, el agente es el hablante que usa frases de agente. Un porcentaje es
+            «llamadas en las que el agente dijo alguna de esas palabras» sobre las @Formato.Entero(r.Base) analizadas
+            (@(Model.Nivel == 0 ? "todas las palabras" : "nivel " + Model.NombreNivel(Model.Nivel) + ", que incluye los niveles anteriores")).
+        </p>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Pares de palabras</h2>
+                <span class="tarjeta-nota">en cuántas llamadas se dice cada lado</span>
+            </header>
+            <div class="leyenda-ns">
+                <span class="serie-espana"><i></i>Dicho en España</span>
+                <span class="serie-colombia"><i></i>Dicho en Colombia</span>
+            </div>
+            <div class="tabla-contenedor alta">
+                <table class="ranking tabla-pares-gaia">
+                    <colgroup>
+                        <col style="width:20%" /><col style="width:20%" /><col style="width:10%" /><col style="width:25%" /><col style="width:25%" />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th scope="col"><span class="cab-columna">España</span></th>
+                            <th scope="col"><span class="cab-columna">Colombia</span></th>
+                            <th scope="col"><span class="cab-columna">Nivel</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Llamadas con la de España</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Llamadas con la de Colombia</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in Model.Pares)
+                        {
+                            <tr>
+                                <td title="@p.Par.TextoEspana">@p.Par.TextoEspana</td>
+                                <td title="@p.Par.TextoColombia">@p.Par.TextoColombia</td>
+                                <td class="texto-suave">@(p.Par.Nivel is { } nv && nv <= Model.Niveles.Count ? Model.NombreNivel(nv) : "—")</td>
+                                <td class="num">
+                                    <span class="pct-barra-ns">
+                                        <span>@Formato.Porcentaje(p.Espana)</span>
+                                        <span class="hbarra-media-pista" aria-hidden="true"><span class="hbarra-media-relleno serie-espana" style="width:@(Formato.Coord(100 * (p.Espana ?? 0) / maxPar))%"></span></span>
+                                    </span>
+                                </td>
+                                <td class="num">
+                                    <span class="pct-barra-ns">
+                                        <span>@Formato.Porcentaje(p.Colombia)</span>
+                                        <span class="hbarra-media-pista" aria-hidden="true"><span class="hbarra-media-relleno serie-colombia" style="width:@(Formato.Coord(100 * (p.Colombia ?? 0) / maxPar))%"></span></span>
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="total">
+                            <td>TOTAL</td>
+                            <td></td>
+                            <td></td>
+                            <td class="num">@Formato.Porcentaje(r.Espana)</td>
+                            <td class="num">@Formato.Porcentaje(r.Colombia)</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+
+        <div class="rejilla-2">
+            <section class="tarjeta">
+                <header class="tarjeta-cabecera">
+                    <h2>Palabras de España</h2>
+                    <span class="tarjeta-nota">% de las llamadas analizadas</span>
+                </header>
+                @await Html.PartialAsync("_RepartoGaia", (Palabras(true), "serie-espana", false))
+                @if (sinUsoEspana > 0)
+                {
+                    <p class="nota-ns">@sinUsoEspana @(sinUsoEspana == 1 ? "palabra más no sale" : "palabras más no salen") en ninguna llamada.</p>
+                }
+            </section>
+            <section class="tarjeta">
+                <header class="tarjeta-cabecera">
+                    <h2>Palabras de Colombia</h2>
+                    <span class="tarjeta-nota">% de las llamadas analizadas</span>
+                </header>
+                @await Html.PartialAsync("_RepartoGaia", (Palabras(false), "serie-colombia", false))
+                @if (sinUsoColombia > 0)
+                {
+                    <p class="nota-ns">@sinUsoColombia @(sinUsoColombia == 1 ? "palabra más no sale" : "palabras más no salen") en ninguna llamada.</p>
+                }
+            </section>
+        </div>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Por etapa de formación</h2>
+                <span class="tarjeta-nota">¿mejora con la formación?</span>
+            </header>
+            @await Html.PartialAsync("_ColumnasGaia", etapa)
+        </section>
+
+        <section class="tarjeta" data-vistas>
+            <header class="tarjeta-cabecera">
+                <h2>Por semana o por día</h2>
+                <span class="tarjeta-nota">% de las llamadas analizadas de cada semana o día</span>
+                <partial name="_SelectorVistaGaia" />
+            </header>
+            <div data-vista="semana">@await Html.PartialAsync("_LineasGaia", PorTiempo("semana", Model.PorSemana))</div>
+            <div data-vista="dia" hidden>@await Html.PartialAsync("_LineasGaia", PorTiempo("dia", Model.PorDia))</div>
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Agentes</h2>
+                <span class="tarjeta-nota">@Formato.Entero(Model.Agentes.Count) agentes, de menos a más España</span>
+            </header>
+            <p class="nota-ns">Los que más ayuda necesitan, arriba; al final, los agentes con menos de <b>@PaginaEspanolizacionGaia.MinBase llamadas analizadas</b> (su porcentaje es poco fiable).</p>
+            <div class="tabla-contenedor alta">
+                <table class="ranking con-puesto tabla-espanolizacion-gaia">
+                    <colgroup>
+                        <col style="width:27%" /><col style="width:10%" /><col style="width:12%" /><col style="width:12%" /><col style="width:13%" /><col style="width:13%" /><col style="width:13%" />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th scope="col"><span class="cab-columna">Agente</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Analizadas</span></th>
+                            <th scope="col" class="num" aria-sort="ascending"><span class="cab-columna">España</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Colombia</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Rellamada</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">No solución</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Adherencia</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var a in Model.Agentes)
+                        {
+                            var e = a.Espanolizacion;
+                            <tr>
+                                <td class="celda-nombre" title="@a.Texto · oleada @a.Oleada"><div class="nombre-fila"><span class="nombre-texto">@a.Texto</span>@if (a.Oleada.Length > 0) {<span class="pastilla-dato" title="Oleada @a.Oleada">@a.Oleada</span>}</div></td>
+                                <td class="num barra-volumen" data-valor="@e.Base">@Formato.Entero(e.Base)</td>
+                                <td class="num">@Formato.Porcentaje(e.Espana)</td>
+                                <td class="num">@Formato.Porcentaje(e.Colombia)</td>
+                                <td class="num">@Formato.Porcentaje(a.Indicadores.Rellamada72)</td>
+                                <td class="num">@Formato.Porcentaje(a.Indicadores.NoSolucion)</td>
+                                <td class="num">@Formato.Porcentaje(a.Indicadores.Adherencia)</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="total">
+                            <td>TOTAL</td>
+                            <td class="num">@Formato.Entero(r.Base)</td>
+                            <td class="num">@Formato.Porcentaje(r.Espana)</td>
+                            <td class="num">@Formato.Porcentaje(r.Colombia)</td>
+                            <td class="num">@Formato.Porcentaje(t.Rellamada72)</td>
+                            <td class="num">@Formato.Porcentaje(t.NoSolucion)</td>
+                            <td class="num">@Formato.Porcentaje(t.Adherencia)</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+    }
+}

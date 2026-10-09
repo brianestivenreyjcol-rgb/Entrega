@@ -1,0 +1,25 @@
+{
+  "_comentario": "Españolización de GAIA Formación: pares de palabras de España y su equivalente de Colombia. Los niveles se acumulan (Aficionado incluye los pares de Novato; Experto, los de los dos). Sacado de las páginas «Españolización Novato/Aficionado/Experto» del PBI. Los pares sin nivel solo salen en «Todas». El PBI tenía «apartamento» como de España y «piso» como de Colombia: es al revés y aquí está corregido. Se escriben con tildes: la web las quita para buscar y busca palabras enteras. Se lee al traer los datos: tras editarlo, pulsar «Actualizar ahora».",
+  "niveles": [ "Novato", "Aficionado", "Experto" ],
+  "pares": [
+    { "espana": [ "móvil" ], "colombia": [ "celular" ], "nivel": "Novato" },
+    { "espana": [ "acceder" ], "colombia": [ "ingresar" ], "nivel": "Novato" },
+    { "espana": [ "tenemos" ], "colombia": [ "manejar" ], "nivel": "Novato" },
+    { "espana": [ "incidencia" ], "colombia": [ "falla" ], "nivel": "Novato" },
+    { "espana": [ "dar" ], "colombia": [ "brindar" ], "nivel": "Novato" },
+    { "espana": [ "me aparece" ], "colombia": [ "me registra" ], "nivel": "Novato" },
+    { "espana": [ "perdona" ], "colombia": [ "qué pena" ], "nivel": "Novato" },
+    { "espana": [ "aplicar" ], "colombia": [ "colocar", "coloco" ], "nivel": "Aficionado" },
+    { "espana": [ "dar de baja" ], "colombia": [ "cancelación" ], "nivel": "Aficionado" },
+    { "espana": [ "dame" ], "colombia": [ "me regala" ], "nivel": "Aficionado" },
+    { "espana": [ "situación" ], "colombia": [ "inconveniente" ], "nivel": "Experto" },
+    { "espana": [ "te la devuelvo" ], "colombia": [ "yo te la regreso" ], "nivel": "Experto" },
+    { "espana": [ "vale" ], "colombia": [ "dale" ], "nivel": null },
+    { "espana": [ "coger" ], "colombia": [ "tomar" ], "nivel": null },
+    { "espana": [ "qué ha pasado" ], "colombia": [ "de pronto" ], "nivel": null },
+    { "espana": [ "qué vergüenza" ], "colombia": [ "disgustar", "disgustado", "disgusto" ], "nivel": null },
+    { "espana": [ "piso" ], "colombia": [ "apartamento" ], "nivel": null },
+    { "espana": [ "dime" ], "colombia": [ ], "nivel": null },
+    { "espana": [ ], "colombia": [ "regalar" ], "nivel": null }
+  ]
+}

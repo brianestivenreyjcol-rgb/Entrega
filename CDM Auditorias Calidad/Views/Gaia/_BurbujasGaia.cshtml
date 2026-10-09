@@ -1,0 +1,52 @@
+@model IReadOnlyList<FilaAgenteGaia>
+@* Burbujas «Rellamada – TMO por agente» (capturas/motivo-1-…): una por agente, con X = TMO (s), Y = % rellamada 72 h y el tamaño
+   = sus llamadas. Los puntos son elementos HTML (no círculos del SVG, que al estirarse se volverían elipses) y la ficha da el
+   nombre y las cifras. Sin líneas de total ni de media (pedido del usuario el 07-10-2026). *@
+@{
+    var puntos = Model.Where(a => a.Indicadores.Tmo is not null && a.Indicadores.Rellamada72 is not null).ToList();
+    var tmos = puntos.Select(a => a.Indicadores.Tmo!.Value).ToList();
+    var minX = tmos.DefaultIfEmpty(0).Min();
+    var maxX = tmos.DefaultIfEmpty(1).Max();
+    var margenX = Math.Max(1, (maxX - minX) * 0.06);
+    minX = Math.Max(0, minX - margenX);
+    maxX += margenX;
+    var (minY, maxY, pasoY) = EscalaGrafico.Porcentaje(puntos.Select(a => a.Indicadores.Rellamada72!.Value).Concat([0.0]));
+    double X(double v) => (v - minX) / (maxX - minX);
+    double Y(double v) => 1 - (v - minY) / (maxY - minY);
+    var maxLlamadas = Math.Max(1, puntos.Select(a => a.Indicadores.Llamadas).DefaultIfEmpty(1).Max());
+    var marcasX = Enumerable.Range(0, 5).Select(k => minX + (maxX - minX) * k / 4).ToList();
+}
+@if (puntos.Count == 0)
+{
+    <p class="vacio corto">Ningún agente tiene @PaginaMotivosGaia.MinBurbuja llamadas o más con estos filtros.</p>
+}
+else
+{
+    <div class="leyenda-ns centrada"><span class="serie-a"><i></i>Un agente (el tamaño es su número de llamadas)</span></div>
+    <figure class="grafica burbujas" role="img" aria-label="Agentes: rellamada 72 h frente a TMO">
+        <div class="plano">
+            <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
+                @for (var v = minY; v <= maxY + pasoY / 2; v += pasoY)
+                {
+                    <line class="rejilla-linea" x1="0" x2="1000" y1="@C(Y(v))" y2="@C(Y(v))" vector-effect="non-scaling-stroke" />
+                }
+            </svg>
+            @for (var v = minY; v <= maxY + pasoY / 2; v += pasoY)
+            {
+                <span class="eje-y" style="top:@P(Y(v))">@Formato.PorcentajeEntero(Math.Round(v * 100))</span>
+            }
+            @foreach (var v in marcasX)
+            {
+                <span class="eje-x" style="left:@P(X(v))">@Formato.Entero((int)Math.Round(v))</span>
+            }
+            @foreach (var a in puntos)
+            {
+                var i = a.Indicadores;
+                var d = Math.Round(8 + 12 * Math.Sqrt((double)i.Llamadas / maxLlamadas));
+                <span class="punto-disp burbuja serie-a" data-ficha="@a.Agente · @NombreFicha("Rellamada 72 h") @Formato.Porcentaje(i.Rellamada72) · TMO @Formato.Decimal2(i.Tmo!.Value) s · Llamadas @Formato.Entero(i.Llamadas)"
+                      style="left:@P(X(i.Tmo!.Value));top:@P(Y(i.Rellamada72!.Value));width:@(Formato.Coord(d))px;height:@(Formato.Coord(d))px"></span>
+            }
+        </div>
+    </figure>
+    <div class="titulo-eje">TMO (s)</div>
+}

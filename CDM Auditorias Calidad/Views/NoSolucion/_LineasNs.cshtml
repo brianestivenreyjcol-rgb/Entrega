@@ -1,0 +1,132 @@
+@model GraficoSeries
+@* El % de no solución diario por marca con las piezas de la guía (crono-linea y punto): una línea por
+   marca (color fijo por marca, --serie), los tramos que tocan un día parcial con línea discontinua y,
+   por día, una banda con su <title> para la ficha («27 sep 2026 · YOIGO 19,60 % · …»). Mismo sistema
+   que las gráficas de Auditorías y GAIA.
+   Cada punto con su valor en una pastilla (.etiqueta-punto) del color de su marca (06-10-2026; sustituye al pico y a los
+   últimos valores): con tantos días se rotula uno de cada pocos (siempre el primero y el último, como en GAIA) y, como
+   hay hasta cuatro marcas en cada día, las pastillas de un mismo día se separan para que no se pisen. Sin línea de media. *@
+@{
+    var n = Math.Max(1, Model.Etiquetas.Count);
+    // Eje Y ajustado al rango de los datos (más un 10 %), no desde 0.
+    var conDato = Model.Series.SelectMany(s => s.Valores).Where(v => v is not null).Select(v => v!.Value).ToList();
+    var minD = conDato.DefaultIfEmpty(0).Min();
+    var maxD = conDato.DefaultIfEmpty(1).Max();
+    var rango = Math.Max(maxD - minD, Math.Max(Math.Abs(maxD) * 0.05, 0.5));
+    var bajo = Math.Max(0, minD - rango * 0.1);
+    var alto = maxD + rango * 0.1;
+    double X(int i) => (i + 0.5) / n;
+    double Y(double v) => 1 - (v - bajo) / (alto - bajo);
+    var marcas = Enumerable.Range(0, 4).Select(m => bajo + (alto - bajo) * m / 3).ToList();
+    var idDegradado = "deg-ns-" + Math.Abs((n + "|" + string.Join(",", Model.Series.Select(s => s.Nombre))).GetHashCode());
+    string C(double fr) => Formato.Coord(fr * 1000);
+    string P(double fr) => Formato.Coord(fr * 100) + "%";
+    var pasoX = Math.Max(1, (int)Math.Ceiling(n / 12.0));
+    var conPuntos = n <= 45;
+    var rotulados = Rotulados(new GraficoGaia(Model.Etiquetas, Model.Detalles, Array.Empty<int>(), Array.Empty<SerieGaia>()) { Dia = true, AnchoEstimado = 420 });
+
+    // Las pastillas de cada día rotulado: con una o dos marcas, la mayor encima y la menor debajo; con más, apiladas en el
+    // orden de sus puntos con una separación mínima (8,5 % del alto) para que no se tapen.
+    const double separacion = 0.085;
+    var pastillas = new List<(string Clase, string Texto, double Y, bool Arriba, bool Centrada, int I)>();
+    foreach (var i in rotulados.OrderBy(i => i))
+    {
+        var dia = Model.Series.Where(s => s.Valores.ElementAtOrDefault(i) is not null)
+            .Select(s => (Serie: s, V: s.Valores[i]!.Value, Y: Y(s.Valores[i]!.Value))).OrderBy(x => x.Y).ToList();
+        if (dia.Count <= 2)
+        {
+            for (var k = 0; k < dia.Count; k++)
+            {
+                var arriba = dia.Count == 1 || k == 0;
+                var y = dia[k].Y;
+                if (!arriba && y > 0.9) arriba = true;
+                else if (arriba && y < 0.06 && dia.Count == 2) arriba = false;
+                pastillas.Add((dia[k].Serie.Clase, FormatoNoSolucion.Pct(dia[k].V), y, arriba, false, i));
+            }
+            continue;
+        }
+        var pos = dia.Select(x => x.Y).ToArray();
+        for (var k = 1; k < pos.Length; k++) pos[k] = Math.Max(pos[k], pos[k - 1] + separacion);
+        if (pos[^1] > 1)
+        {
+            pos[^1] = 1;
+            for (var k = pos.Length - 2; k >= 0; k--) pos[k] = Math.Min(pos[k], pos[k + 1] - separacion);
+        }
+        for (var k = 0; k < dia.Count; k++) pastillas.Add((dia[k].Serie.Clase, FormatoNoSolucion.Pct(dia[k].V), pos[k], false, true, i));
+    }
+}
+<figure class="grafica lineas-ns indicador-fig" role="img" aria-label="Porcentaje de no solución diario por marca">
+    <div class="plano">
+        <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
+            @if (Model.Series.Count == 1)
+            {
+                <g class="@Model.Series[0].Clase">
+                    <defs>
+                        <linearGradient id="@idDegradado" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0" class="degradado-ini" />
+                            <stop offset="1" class="degradado-fin" />
+                        </linearGradient>
+                    </defs>
+                </g>
+            }
+            @foreach (var v in marcas)
+            {
+                <line class="rejilla-linea" x1="0" x2="1000" y1="@C(Y(v))" y2="@C(Y(v))" vector-effect="non-scaling-stroke" />
+            }
+            @foreach (var s in Model.Series)
+            {
+                // La línea va suavizada (Catmull-Rom); los tramos que tocan un día parcial, rectos y discontinuos.
+                var (suave, areaSuave) = TrazosSuaves(s.Valores.Select((v, i) => v is { } x && !Model.Discontinuos.Contains(i) ? (double?)Y(x) : null).ToList(), X);
+                var discontinuo = new System.Text.StringBuilder();
+                for (var i = 0; i + 1 < s.Valores.Count; i++)
+                {
+                    if (s.Valores[i] is not { } a || s.Valores[i + 1] is not { } b) continue;
+                    if (!(Model.Discontinuos.Contains(i) || Model.Discontinuos.Contains(i + 1))) continue;
+                    discontinuo.Append($"M{C(X(i))},{C(Y(a))} L{C(X(i + 1))},{C(Y(b))} ");
+                }
+                if (Model.Series.Count == 1)
+                {
+                    <path class="indicador-area" d="@areaSuave" fill="url(#@idDegradado)" />
+                }
+                <g class="@s.Clase">
+                    <path class="crono-linea" d="@suave" vector-effect="non-scaling-stroke" />
+                    @if (discontinuo.Length > 0)
+                    {
+                        <path class="crono-linea discontinua" d="@discontinuo" vector-effect="non-scaling-stroke" />
+                    }
+                </g>
+            }
+            @for (var i = 0; i < Model.Etiquetas.Count; i++)
+            {
+                var partes = Model.Series.Select(s => $"{s.Nombre} {FormatoNoSolucion.Pct(s.Valores.ElementAtOrDefault(i))}");
+                <rect class="banda" data-i="@i" data-x="@Formato.Coord(X(i))" x="@C((double)i / n)" y="0" width="@C(1.0 / n)" height="1000"><title>@Model.Detalles[i] · @string.Join(" · ", partes)</title></rect>
+            }
+        </svg>
+        @foreach (var v in marcas)
+        {
+            <span class="eje-y" style="top:@P(Y(v))">@FormatoNoSolucion.Pct(v)</span>
+        }
+        @if (conPuntos)
+        {
+            foreach (var s in Model.Series)
+            {
+                for (var i = 0; i < s.Valores.Count; i++)
+                {
+                    if (s.Valores[i] is not { } v) continue;
+                    <span class="punto @s.Clase" data-i="@i" style="left:@P(X(i));top:@P(Y(v))"></span>
+                }
+            }
+        }
+        @foreach (var p in pastillas)
+        {
+            <span class="etiqueta-punto @p.Clase@(p.Centrada ? " centro" : p.Arriba ? " arriba" : " abajo")@(p.I == 0 ? " al-inicio" : p.I == n - 1 ? " al-final" : "")" style="left:@P(X(p.I));top:@P(p.Y)">@p.Texto</span>
+        }
+        @for (var i = 0; i < Model.Etiquetas.Count; i++)
+        {
+            if (i == Model.Etiquetas.Count - 1 || (i % pasoX == 0 && Model.Etiquetas.Count - 1 - i >= pasoX))
+            {
+                <span class="eje-x" style="left:@P(X(i))">@Model.Etiquetas[i]</span>
+            }
+        }
+    </div>
+</figure>

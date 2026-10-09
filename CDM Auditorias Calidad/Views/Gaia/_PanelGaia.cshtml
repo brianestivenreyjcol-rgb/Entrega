@@ -1,0 +1,67 @@
+@model PaginaGaia
+@* Panel de filtros de GAIA Formación, con las piezas del de No solución: fechas y los siete desplegables
+   del PBI (Marca, Sector, Oleada, Tipo de conexión, Formador, Supervisor y Agente), que se filtran al
+   marcar. El rango por defecto es todo lo que hay (data-defecto): si una fecha es la de por defecto,
+   site.js no la pone en la URL y el rango sigue creciendo con los datos nuevos. En el pie, el CSV y el
+   estado de los datos. *@
+@{
+    var f = Model.Filtros!;
+    var ruta = PaginaGaia.Ruta(Model.Pestana);
+    var volver = Context.Request.Path + Context.Request.QueryString;
+    var enCurso = Model.Cargando || Model.Actualizacion == "en-curso";
+}
+<aside class="panel-filtros" aria-label="Filtros">
+    <partial name="_PanelCabecera" />
+    <form method="get" action="@ruta" data-tablero-filtros>
+        @foreach (var p in Model.ParametrosPropios)
+        {
+            <input type="hidden" name="@p.Key" value="@p.Value" />
+        }
+
+        <div class="grupo-filtros">
+            <div class="campo">
+                <span class="campo-titulo">Fechas <span class="texto-tenue">· @f.Dias @(f.Dias == 1 ? "día" : "días")</span></span>
+                <div class="rango-fechas">
+                    <input type="date" name="desde" value="@f.Desde.ToString("yyyy-MM-dd")" min="@f.DiaMin.ToString("yyyy-MM-dd")" max="@f.Hasta.ToString("yyyy-MM-dd")"
+                           aria-label="Fecha inicial" data-defecto="@f.DiaMin.ToString("yyyy-MM-dd")" />
+                    <input type="date" name="hasta" value="@f.Hasta.ToString("yyyy-MM-dd")" min="@f.Desde.ToString("yyyy-MM-dd")" max="@f.DiaMax.ToString("yyyy-MM-dd")"
+                           aria-label="Fecha final" data-defecto="@f.DiaMax.ToString("yyyy-MM-dd")" />
+                </div>
+            </div>
+        </div>
+
+        @* Como en el resto de la web (guía, 4): un desplegable con menos de dos opciones no se pinta. *@
+        @foreach (var bloque in EnBloques(f.Desplegables, ["marca", "sector"], ["oleada", "conexion", "formador"], ["supervisor", "agente"]))
+        {
+            <div class="grupo-filtros">
+                @foreach (var g in bloque)
+                {
+                    <partial name="_Desplegable" model="g" />
+                }
+            </div>
+        }
+        <noscript><button type="submit" class="boton-aplicar">Aplicar filtros</button></noscript>
+    </form>
+
+    <div class="panel-pie">
+        <div class="acciones-filtros">
+            <a class="btn-panel primario" href="@Model.UrlCsv" title="Todas las llamadas con estos filtros, con sus ID y calificaciones, en CSV para Excel">
+                @Iconos.Svg("hoja") Descargar CSV
+            </a>
+            <a class="btn-panel" href="@Model.UrlLimpiar" data-parcial>@Iconos.Svg("borrar-filtros") Borrar filtros</a>
+        </div>
+        <form method="post" action="@(PaginaGaia.RutaBase)/actualizar" class="estado-datos">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="volver" value="@volver" />
+            <span>@Iconos.Svg("reloj") Se actualiza sola al guardar el Excel de nómina (se mira cada 5 min) y cada 12 h</span>
+            @if (Model.Datos is { } d && d.Generado != default)
+            {
+                <span>Datos traídos el @Formato.FechaHora(d.Generado)</span>
+            }
+            <button type="submit" class="enlace" disabled="@enCurso"
+                    title="Vuelve a leer el Excel de nómina y a traer las llamadas de BigQuery sin esperar. Tarda alrededor de un minuto.">
+                @(enCurso ? "Trayendo datos…" : "Actualizar ahora")
+            </button>
+        </form>
+    </div>
+</aside>

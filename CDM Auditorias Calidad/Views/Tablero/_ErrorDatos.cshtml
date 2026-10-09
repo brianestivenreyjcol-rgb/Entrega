@@ -1,0 +1,21 @@
+@model TableroModelo
+@* Aviso cuando la consulta falla o todavía no ha terminado la primera carga. *@
+@if (Model.ErrorDatos is { } error)
+{
+    <div class="aviso" role="alert">
+        @Iconos.Svg("alerta")
+        <span>
+            @(Model.HayDatos
+                ? "No se pudieron actualizar los datos; se muestran los de " + Formato.FechaHora(Model.DatosCargadosEn!.Value) + "."
+                : "No se pudieron cargar los datos de auditorías.")
+            <small>@error</small>
+        </span>
+    </div>
+}
+else if (!Model.HayDatos)
+{
+    <div class="aviso" role="status">
+        @Iconos.Svg("reloj")
+        <span>Cargando los datos de auditorías… vuelve a intentarlo en unos segundos.</span>
+    </div>
+}

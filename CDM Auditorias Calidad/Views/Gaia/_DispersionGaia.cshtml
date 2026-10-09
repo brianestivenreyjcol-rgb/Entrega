@@ -1,0 +1,44 @@
+@model DispersionGaia
+@* Un punto por agente frente a dos indicadores (los ejes). El tamaño del punto es su volumen de llamadas y la
+   ficha da el nombre y los dos valores (sin líneas del total, pedido del usuario el 07-10-2026). Los puntos son elementos HTML (no círculos del SVG, que al estirarse se volverían elipses). *@
+@{
+    var puntos = Model.Puntos;
+    var (minX, maxX, pasoX) = EscalaGrafico.Porcentaje(puntos.Select(p => p.X));
+    var (minY, maxY, pasoY) = EscalaGrafico.Porcentaje(puntos.Select(p => p.Y));
+    double X(double v) => (v - minX) / (maxX - minX);
+    double Y(double v) => 1 - (v - minY) / (maxY - minY);
+    var maxLlamadas = Math.Max(1, puntos.Select(p => p.Llamadas).DefaultIfEmpty(1).Max());
+}
+<div class="leyenda-ns centrada">
+    <span class="serie-a"><i></i>Un agente (el tamaño es su número de llamadas)</span>
+</div>
+<figure class="grafica dispersion" role="img" aria-label="Agentes: @Model.X.Nombre frente a @Model.Y.Nombre">
+    <div class="plano">
+        <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
+            @for (var v = minY; v <= maxY + pasoY / 2; v += pasoY)
+            {
+                <line class="rejilla-linea" x1="0" x2="1000" y1="@C(Y(v))" y2="@C(Y(v))" vector-effect="non-scaling-stroke" />
+            }
+            @for (var v = minX; v <= maxX + pasoX / 2; v += pasoX)
+            {
+                <line class="rejilla-linea" x1="@C(X(v))" x2="@C(X(v))" y1="0" y2="1000" vector-effect="non-scaling-stroke" />
+            }
+        </svg>
+        @for (var v = minY; v <= maxY + pasoY / 2; v += pasoY)
+        {
+            <span class="eje-y" style="top:@P(Y(v))">@Formato.PorcentajeEntero(Math.Round(v * 100))</span>
+        }
+        @for (var v = minX; v <= maxX + pasoX / 2; v += pasoX)
+        {
+            <span class="eje-x" style="left:@P(X(v))">@Formato.PorcentajeEntero(Math.Round(v * 100))</span>
+        }
+        @foreach (var p in puntos)
+        {
+            var d = Math.Round(8 + 12 * Math.Sqrt((double)p.Llamadas / maxLlamadas));
+            <span class="punto-disp serie-a" data-ficha="@p.Nombre · @NombreFicha(Model.X.Nombre) @Formato.Porcentaje(p.X) · @NombreFicha(Model.Y.Nombre) @Formato.Porcentaje(p.Y) · Llamadas @Formato.Entero(p.Llamadas)"
+                  style="left:@P(X(p.X));top:@P(Y(p.Y));width:@(Formato.Coord(d))px;height:@(Formato.Coord(d))px"></span>
+        }
+        <span class="esquina esquina-x">@(Model.X.MejorAlto ? "mejor →" : "← mejor")</span>
+        <span class="esquina esquina-y">@(Model.Y.MejorAlto ? "↑ mejor" : "↓ mejor")</span>
+    </div>
+</figure>

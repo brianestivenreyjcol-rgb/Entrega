@@ -1,0 +1,71 @@
+@model PaginaNoSolucion
+@* Panel de filtros de CDM No solución, con las piezas del de Auditorías: fechas y atajos, y los cinco
+   desplegables del informe (se filtran al marcar). Supervisor, TL y agente se encadenan: al elegir un
+   supervisor, las otras dos listas se reducen a su equipo. El rango por defecto son los últimos 30 días
+   (data-defecto): si las dos fechas son esas, site.js no las pone en la URL y el rango sigue al último día. *@
+@{
+    var f = Model.Filtros!;
+    var meta = Model.Meta!;
+    var ruta = PaginaNoSolucion.Ruta(Model.Pestana);
+    var atajo = Model.AtajoActivo;
+    var volver = Context.Request.Path + Context.Request.QueryString;
+    var enCurso = Model.Contexto.Construyendo || Model.Actualizacion == "en-curso";
+}
+<aside class="panel-filtros" aria-label="Filtros">
+    <partial name="_PanelCabecera" />
+    <form method="get" action="@ruta" data-tablero-filtros data-fechas-juntas>
+        @foreach (var p in Model.ParametrosPropios)
+        {
+            <input type="hidden" name="@p.Key" value="@p.Value" />
+        }
+
+        <div class="grupo-filtros">
+            <div class="campo">
+                <span class="campo-titulo">Fechas <span class="texto-tenue">· @f.Dias @(f.Dias == 1 ? "día" : "días")</span></span>
+                <div class="rango-fechas">
+                    <input type="date" name="desde" value="@f.Desde" min="@meta.DiaMin" max="@f.Hasta" aria-label="Fecha inicial"
+                           data-defecto="@FiltrosCdm.DesdePorDefecto(meta.DiaMax!, meta.DiaMin!)" />
+                    <input type="date" name="hasta" value="@f.Hasta" min="@f.Desde" max="@meta.DiaMax" aria-label="Fecha final"
+                           data-defecto="@meta.DiaMax" />
+                </div>
+                <div class="atajos-ns" role="group" aria-label="Atajos de fecha">
+                    @foreach (var a in FiltrosCdm.Atajos)
+                    {
+                        <a class="atajo@(a.Valor == atajo ? " activo" : "")" href="@Model.UrlAtajo(a.Valor)" data-parcial
+                           aria-current="@(a.Valor == atajo ? "true" : null)">@a.Texto</a>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Como en Auditorías (guía, 4): un desplegable con menos de dos opciones no se pinta. *@
+        @foreach (var bloque in EnBloques(Model.Desplegables(), ["servicio", "marca"], ["supervisor", "tl", "agente"]))
+        {
+            <div class="grupo-filtros">
+                @foreach (var g in bloque)
+                {
+                    <partial name="_Desplegable" model="g" />
+                }
+            </div>
+        }
+        <noscript><button type="submit" class="boton-aplicar">Aplicar filtros</button></noscript>
+    </form>
+
+    <div class="panel-pie">
+        <div class="acciones-filtros">
+            <a class="btn-panel primario" href="@Model.UrlCsv()" title="Todas las llamadas no solucionadas con estos filtros, con su ID, en CSV para Excel">
+                @Iconos.Svg("hoja") Descargar CSV
+            </a>
+            <a class="btn-panel" href="@Model.UrlLimpiar" data-parcial>@Iconos.Svg("borrar-filtros") Borrar filtros</a>
+        </div>
+        <form method="post" action="@(PaginaNoSolucion.RutaBase)/actualizar" class="estado-datos">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="volver" value="@volver" />
+            <span>@Iconos.Svg("reloj") Se renueva sola cada 12 h</span>
+            <button type="submit" class="enlace" disabled="@enCurso"
+                    title="Vuelve a traer los 3 meses de BigQuery sin esperar a la renovación. Tarda alrededor de un minuto.">
+                @(enCurso ? "Trayendo datos…" : "Actualizar ahora")
+            </button>
+        </form>
+    </div>
+</aside>

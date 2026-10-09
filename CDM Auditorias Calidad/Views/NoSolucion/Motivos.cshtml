@@ -1,0 +1,103 @@
+@model PaginaMotivosNoSolucion
+@* Motivos: áreas N2 en barras y las 25 tipologías N3; cada una se despliega con sus diez llamadas de
+   ejemplo y la exportación de todas las suyas. *@
+@{
+    Layout = "_InformeNoSolucion";
+}
+@if (Model.Datos is { } datos)
+{
+    var r = datos.Motivos;
+    <section class="tarjeta">
+        <header class="tarjeta-cabecera">
+            <h2>Por qué no se soluciona</h2>
+            <span class="tarjeta-nota">áreas N2 · mínimo @r.SueloN2 encuestas</span>
+        </header>
+        <p class="nota-ns">
+            La barra mide cuántas no solucionadas aporta cada área <b>en absoluto</b>, que es lo que se puede recortar; la
+            tasa sola premia a las áreas pequeñas.
+        </p>
+        @if (r.N2.Count > 0)
+        {
+            var barras = r.N2.Select(x =>
+            {
+                var tono = ServicioCdm.Tono(x.Desvio);
+                return new BarraNs(x.Nombre, $"{FormatoNoSolucion.Int(x.Encuestadas)} encuestadas · {FormatoNoSolucion.Pct(x.Cobertura)} cobertura",
+                    x.Nosol, $"{FormatoNoSolucion.Int(x.Nosol)} sin solucionar", $"{FormatoNoSolucion.Pct(x.Pct)} de las suyas",
+                    "tono-" + (tono is null or "bueno" ? "neutro" : tono));
+            }).ToList();
+            <partial name="_BarrasNs" model="new BarrasNs(barras)" />
+        }
+        else
+        {
+            <p class="vacio">Ninguna área llega a @r.SueloN2 encuestas con estos filtros.</p>
+        }
+    </section>
+
+    <section class="tarjeta">
+        <header class="tarjeta-cabecera">
+            <h2>Las tipologías que más acumulan</h2>
+            <div class="cabecera-acciones-ns">
+                <span class="tarjeta-nota">N3 · top 25 · mínimo @r.SueloN3 encuestas</span>
+                @if (r.N3.Count > 0)
+                {
+                    <a class="boton-secundario pequeno" href="@Model.UrlCsvTabla" title="Esta tabla en CSV para Excel">@Iconos.Svg("hoja") CSV</a>
+                }
+            </div>
+        </header>
+        <p class="nota-ns">Pulsa una fila para leer lo que contaron esas llamadas.</p>
+        @if (r.N3.Count > 0)
+        {
+            <div class="filas-ns">
+                <div class="fila-ns fila-ns-cabecera cols-n3" aria-hidden="true">
+                    <span>Tipología</span><span class="num">Encuestadas</span><span class="num">No sol.</span>
+                    <span class="num">% no solución</span><span class="num">Peso</span>
+                </div>
+                @for (var i = 0; i < r.N3.Count; i++)
+                {
+                    var x = r.N3[i];
+                    <details class="desplegable-ns">
+                        <summary class="fila-ns cols-n3">
+                            <span class="fila-ns-nombre">@Iconos.Svg("derecha", "chevron-ns")<span class="puesto-ns">@(i + 1)</span><span>@x.Nombre</span></span>
+                            <span class="num">@FormatoNoSolucion.Int(x.Encuestadas)</span>
+                            <span class="num">@FormatoNoSolucion.Int(x.Nosol)</span>
+                            <span class="num">@FormatoNoSolucion.ChipTasa(x.Pct, x.Desvio)</span>
+                            <span class="num texto-suave">@FormatoNoSolucion.Pct(x.Peso)</span>
+                        </summary>
+                        <div class="cuerpo-ns">
+                            @if (datos.Muestras.TryGetValue(x.Nombre, out var m))
+                            {
+                                var explicacion = Html.Raw(
+                                    $"Muestra de {m.Muestras.Count} de las {FormatoNoSolucion.Int(m.Total)} no solucionadas con estos filtros. " +
+                                    "El texto es el resumen de la conversación (<code>interactionScopeDetail_assessment</code>, o " +
+                                    "<code>contactReason_contactReasonSummary</code> si viene vacío), con los teléfonos enmascarados en origen.");
+                                var modeloMuestras = new MuestrasNs("Qué contaron estas llamadas", explicacion, m.Muestras, m.Total,
+                                    Model.UrlCsv(n3: x.Nombre), false, "No hay texto guardado para esta tipología.");
+                                <partial name="_MuestrasNs" model="modeloMuestras" />
+                            }
+                            else
+                            {
+                                <p class="nota-ns">No se pudieron leer las llamadas de esta tipología.</p>
+                            }
+                        </div>
+                    </details>
+                }
+                @* Total al pie (nunca arriba): la suma de las tipologías de la lista. *@
+                @{
+                    var totEnc = r.N3.Sum(x => (double)x.Encuestadas);
+                    var totNosol = r.N3.Sum(x => (double)x.Nosol);
+                }
+                <div class="fila-ns fila-total cols-n3">
+                    <span class="fila-ns-nombre">TOTAL</span>
+                    <span class="num">@FormatoNoSolucion.Int(totEnc)</span>
+                    <span class="num">@FormatoNoSolucion.Int(totNosol)</span>
+                    <span class="num">@FormatoNoSolucion.Pct(totEnc == 0 ? null : 100.0 * totNosol / totEnc)</span>
+                    <span class="num">@FormatoNoSolucion.Pct(r.N3.Sum(x => x.Peso ?? 0))</span>
+                </div>
+            </div>
+        }
+        else
+        {
+            <p class="vacio">Ninguna tipología llega a @r.SueloN3 encuestas con estos filtros.</p>
+        }
+    </section>
+}

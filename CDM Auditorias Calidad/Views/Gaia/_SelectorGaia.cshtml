@@ -1,0 +1,20 @@
+@model SelectorGaia
+@* Desplegable de enlaces con el aspecto del de los filtros (details.multi): cada opción es un enlace data-parcial que
+   recarga la pestaña con su parámetro (?kpi=, ?x=, ?y=). No necesita JavaScript propio. *@
+<div class="selector-campo">
+    <span class="campo-titulo" id="titulo-@Model.Id">@Model.Titulo</span>
+    <details class="multi activo selector-kpi" data-campo="@Model.Id">
+        <summary aria-labelledby="titulo-@Model.Id resumen-@Model.Id">
+            <span class="texto" id="resumen-@Model.Id">@Model.Actual</span>
+            @Iconos.Svg("abajo", "chevron")
+        </summary>
+        <div class="desplegable">
+            <div class="opciones">
+                @foreach (var o in Model.Opciones)
+                {
+                    <a class="opcion-enlace@(o.Activa ? " activa" : "")" href="@o.Url" data-parcial aria-current="@(o.Activa ? "true" : null)">@o.Texto</a>
+                }
+            </div>
+        </div>
+    </details>
+</div>

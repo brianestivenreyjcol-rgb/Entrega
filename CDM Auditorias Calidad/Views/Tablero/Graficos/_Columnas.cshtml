@@ -1,0 +1,29 @@
+@model TableroModelo
+@* «Evolución de auditorías»: columnas con el total de auditorías por día, semana o mes, con las piezas comunes de las
+   gráficas (_ColumnasGaia): leyenda arriba, cada columna con su valor en una pastilla y una banda por periodo con su
+   <title> para la ficha («Etiqueta · Auditorías N · Nota X %»). Con muchos días, la pastilla va en uno de cada pocos. *@
+@{
+    var puntos = Model.Evolucion;
+    var tituloEje = Model.Vista switch { Vista.Dia => "Día", Vista.Semana => "Semana", _ => "Mes" };
+    var grafico = new GraficoGaia(
+        puntos.Select(p => p.Etiqueta).ToList(), puntos.Select(p => p.Detalle).ToList(), puntos.Select(p => p.Cantidad).ToList(),
+        [new SerieGaia("Auditorías", "serie-a", puntos.Select(p => (double?)p.Cantidad).ToList())])
+    {
+        Entero = true,
+        SinVolumen = true,
+        Dia = Model.Vista == Vista.Dia,
+        AnchoEstimado = 900,
+        MaxEtiquetasX = 14,
+        FichaExtra = puntos.Select(p => "Nota " + Formato.Porcentaje(p.Nota)).ToList(),
+        Descripcion = "Total de auditorías por " + tituloEje.ToLowerInvariant(),
+    };
+}
+@if (puntos.Count == 0)
+{
+    <p class="vacio">Sin auditorías con estos filtros</p>
+}
+else
+{
+    @await Html.PartialAsync("_ColumnasGaia", grafico)
+    <div class="titulo-eje">@tituloEje</div>
+}

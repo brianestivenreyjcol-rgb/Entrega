@@ -1,0 +1,14 @@
+@model PaginaNoSolucion
+@* La página entera de CDM No solución: el documento base y la cabecera común. Lo de dentro
+   (#informe) es _InformeNoSolucion, que es lo único que se pide al filtrar. *@
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "CDM No solución · " + PaginaNoSolucion.Texto(Model.Pestana);
+    // El color de la página sigue a la marca filtrada (solo ORANGE, solo YOIGO/MASMOVIL, solo JAZZTEL); si no, el de por defecto.
+    ViewData["Marca"] = MarcaDePagina(Model.Filtros?.Marca);
+    ViewData["Area"] = "No solución";
+    ViewData["Migas"] = new[] { "No solución", PaginaNoSolucion.Texto(Model.Pestana) };
+    var cabecera = new CabeceraModelo("CDM No solución", "Bogotá · Call · YOIGO, MASMOVIL, JAZZTEL y ORANGE");
+}
+<partial name="_Cabecera" model="cabecera" />
+@RenderBody()

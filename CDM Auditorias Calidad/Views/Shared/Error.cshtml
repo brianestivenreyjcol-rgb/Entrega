@@ -1,0 +1,15 @@
+@model ErrorViewModel
+@{
+    ViewData["Title"] = "Error";
+    ViewData["Marca"] = "portada";
+}
+<partial name="_Cabecera" model="new CabeceraModelo()" />
+<main class="pagina-error">
+    <h1>Algo ha fallado</h1>
+    <p>No se pudo completar la petición. Vuelve a intentarlo en unos segundos.</p>
+    @if (Model.ShowRequestId)
+    {
+        <p class="detalle">Referencia: <code>@Model.RequestId</code></p>
+    }
+    <p><a class="pestana activa" href="/">Volver al menú</a></p>
+</main>

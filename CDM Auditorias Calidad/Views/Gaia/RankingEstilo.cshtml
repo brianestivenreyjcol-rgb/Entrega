@@ -1,0 +1,363 @@
+@model PaginaRankingEstiloGaia
+@* Ranking y Estilo (como la pestaña del mismo nombre del portal SOLARIS; capturas ranking-estilo-superior, ranking-estilo-tabla y
+   ranking-tipologico): arriba, la adherencia en un medidor de medio arco con aguja y los ocho criterios en anillos con la cifra
+   dentro (alto / medio / bajo con PaginaRankingEstiloGaia.UmbralBajo y UmbralMedio, sin rotular los umbrales); después la
+   evolución con pestañas de indicador (indicador + volumen), el ranking general por supervisor, formador, oleada o agente (con
+   buscador, semáforo pastel, barrita de volumen y TOTAL al pie), el ranking tipológico por motivo con filas que se despliegan y,
+   lo propio de GAIA, la adherencia por etapa y la matriz agente × etapa. *@
+@{
+    Layout = "_InformeGaia";
+}
+@if (!Model.Preparando)
+{
+    var t = Model.Total!;
+    var f = Model.Filtros!;
+    var e = t.Estilo;
+    if (t.Llamadas == 0)
+    {
+        <p class="vacio">Ninguna llamada cumple estos filtros.</p>
+    }
+    else
+    {
+        var bajo = PaginaRankingEstiloGaia.UmbralBajo;
+        var medio = PaginaRankingEstiloGaia.UmbralMedio;
+        var tono = TonoAdherencia(e.Adherencia);
+        var nivel = e.Adherencia is not { } a ? "Sin dato" : a <= bajo ? "Baja" : a <= medio ? "Media" : "Alta";
+        var chipNivel = tono switch { "tono-critico" => "chip-critico", "tono-atencion" => "chip-atencion", "tono-bueno" => "chip-bueno", _ => "" };
+        // nombre, valor, peso en la nota (nulo: no puntúa) y qué mide; en el orden del portal
+        var criterios = new (string Nombre, double? Valor, double? Peso, string Ayuda)[]
+        {
+            ("Saludo", e.Saludo, CalculadoraGaia.PesoSaludo, "El agente saluda y se presenta."),
+            ("Soy claro y fiable", e.SoyClaro, CalculadoraGaia.PesoSoyClaro, "Lenguaje claro y que da confianza."),
+            ("Escuchó", e.Escucho, null, "Habla menos del 80 % de la llamada, no se pisan 10 veces o más y reconoce al cliente. Lo que no tiene dato no penaliza."),
+            ("Buscó información", e.BuscoInformacion, null, "El silencio no pasa de la mitad de la duración de la llamada."),
+            ("Solucionó", e.Soluciono, CalculadoraGaia.PesoSoluciono, "Resuelve lo que el cliente pedía."),
+            ("Resumió", e.Resumo, CalculadoraGaia.PesoResumo, "Resume lo hablado antes de cerrar."),
+            ("Confirmó solución", e.ConfirmoSolucion, CalculadoraGaia.PesoConfirmo, "Confirma con el cliente que queda resuelto."),
+            ("Despedida", e.Despedida, CalculadoraGaia.PesoDespedida, "Cierra la llamada con una despedida correcta."),
+        };
+        string ClaseAnillo(double? v) => v is not { } x ? "" : x <= bajo ? "bajo" : x <= medio ? "medio" : "alto";
+        string Peso(double p) => (p * 100).ToString("0");
+
+        // Medidor de medio arco: centro (110, 110) y radio 90 en un lienzo de 220 × 125; la aguja gira de 0 % (izquierda) a 100 % (derecha).
+        var fraccion = Math.Clamp(e.Adherencia ?? 0, 0, 1);
+        string K(double v) => Formato.Coord(v);
+        double Px(double radio, double fr) => 110 + radio * Math.Cos(Math.PI * (1 - fr));
+        double Py(double radio, double fr) => 110 - radio * Math.Sin(Math.PI * (1 - fr));
+
+        // Evolución: la adherencia y cada criterio, por semana y por día
+        var indicadores = new IndicadorGaia[]
+        {
+            new("adherencia", "Adherencia", i => i.Estilo.Adherencia),
+            new("saludo", "Saludo", i => i.Estilo.Saludo),
+            new("claro", "Soy claro y fiable", i => i.Estilo.SoyClaro),
+            new("escucho", "Escuchó", i => i.Estilo.Escucho),
+            new("busco", "Buscó información", i => i.Estilo.BuscoInformacion),
+            new("soluciono", "Solucionó", i => i.Estilo.Soluciono),
+            new("resumo", "Resumió", i => i.Estilo.Resumo),
+            new("confirmo", "Confirmó solución", i => i.Estilo.ConfirmoSolucion),
+            new("despedida", "Despedida", i => i.Estilo.Despedida),
+        };
+
+        var agrupacion = PaginaRankingEstiloGaia.Agrupaciones.First(g => g.Clave == Model.Agrupar);
+        var porAgente = Model.Agrupar == "agente";
+        string? SentidoDe(string clave) => Model.Orden == clave ? (Model.Descendente ? "descending" : "ascending") : null;
+        var rango = Formato.Fecha(f.Desde) + " – " + Formato.Fecha(f.Hasta);
+        var siguiente = Model.NivelMotivo + 1;
+
+        <div class="rejilla-estilo">
+            <section class="tarjeta">
+                <header class="tarjeta-cabecera">
+                    <h2>Adherencia · Estilo</h2>
+                </header>
+                <div class="medidor" role="meter" aria-label="Adherencia al estilo" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Math.Round((e.Adherencia ?? 0) * 100)">
+                    <div class="medidor-arco">
+                        <svg viewBox="0 0 220 125" aria-hidden="true" focusable="false">
+                            <path class="medidor-zona zona-baja" d="M 20 110 A 90 90 0 0 1 200 110" pathLength="100" stroke-dasharray="@K(bajo * 100) 100" />
+                            <path class="medidor-zona zona-media" d="M 20 110 A 90 90 0 0 1 200 110" pathLength="100" stroke-dasharray="0 @K(bajo * 100) @K((medio - bajo) * 100) 100" />
+                            <path class="medidor-zona zona-alta" d="M 20 110 A 90 90 0 0 1 200 110" pathLength="100" stroke-dasharray="0 @K(medio * 100) @K((1 - medio) * 100) 100" />
+                            <line class="medidor-aguja" x1="110" y1="110" x2="@K(Px(72, fraccion))" y2="@K(Py(72, fraccion))" />
+                            <circle class="medidor-eje" cx="110" cy="110" r="5.5" />
+                        </svg>
+                    </div>
+                    <p class="medidor-titulo">% Adherencia</p>
+                    <p class="medidor-cifra">@Formato.Porcentaje(e.Adherencia)</p>
+                    <div class="medidor-extremos"><span>0 %</span><span class="chip @chipNivel">@nivel</span><span>100 %</span></div>
+                </div>
+                <p class="medidor-pie">@Formato.Entero(t.Llamadas) llamadas · @rango</p>
+            </section>
+            <section class="tarjeta">
+                <header class="tarjeta-cabecera">
+                    <h2>Indicadores generales</h2>
+                    <span class="tarjeta-nota">Los seis ítems con peso suman la adherencia (Saludo @Peso(CalculadoraGaia.PesoSaludo), Soy claro @Peso(CalculadoraGaia.PesoSoyClaro), Solucionó @Peso(CalculadoraGaia.PesoSoluciono), Resumió @Peso(CalculadoraGaia.PesoResumo), Confirmó @Peso(CalculadoraGaia.PesoConfirmo), Despedida @Peso(CalculadoraGaia.PesoDespedida))</span>
+                </header>
+                <div class="anillos">
+                    @foreach (var c in criterios)
+                    {
+                        var fr = Math.Clamp(c.Valor ?? 0, 0, 1);
+                        <div class="anillo @ClaseAnillo(c.Valor)" title="@c.Ayuda">
+                            <span class="anillo-nombre">% @c.Nombre</span>
+                            <div class="anillo-aro">
+                                <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+                                    <circle class="anillo-pista" cx="50" cy="50" r="42" />
+                                    <circle class="anillo-valor" cx="50" cy="50" r="42" pathLength="100" stroke-dasharray="@K(fr * 100) 100" />
+                                </svg>
+                                <span class="anillo-cifra">@Formato.Porcentaje(c.Valor)</span>
+                            </div>
+                            <span class="anillo-peso">@(c.Peso is { } peso ? "peso " + Formato.PorcentajeEntero(peso * 100) : "no puntúa")</span>
+                        </div>
+                    }
+                </div>
+            </section>
+        </div>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Evolución · <span data-ind-nombre>Adherencia</span></h2>
+                <span class="tarjeta-nota">El indicador (línea) por semana ISO o por día y las llamadas de cada periodo (columnas grises)</span>
+            </header>
+            @await Html.PartialAsync("_IndicadorVolumenGaia", new IndicadorVolumenGaia("estilo", indicadores, Model.PorSemana, Model.PorDia))
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Ranking general por @agrupacion.Texto.ToLowerInvariant()</h2>
+                <span class="tarjeta-nota">@Formato.Entero(Model.Filas.Count) filas · @rango · pulsa una cabecera para ordenar</span>
+                <div class="barra-tarjeta">
+                    <div class="pestanas-vista" role="group" aria-label="Agrupar el ranking por">
+                        @foreach (var (clave, texto) in PaginaRankingEstiloGaia.Agrupaciones)
+                        {
+                            <a class="segmento@(clave == Model.Agrupar ? " activo" : "")" href="@Model.UrlAgrupar(clave)" data-parcial
+                               aria-current="@(clave == Model.Agrupar ? "true" : null)">@texto</a>
+                        }
+                    </div>
+                    <form method="get" action="@PaginaGaia.Ruta(Model.Pestana)" class="buscar-tarjeta" role="search" data-parcial>
+                        @foreach (var p in (Model.Filtros?.Parametros() ?? []).Concat(Model.ParametrosPropios.Where(x => x.Key != "q")))
+                        {
+                            <input type="hidden" name="@p.Key" value="@p.Value" />
+                        }
+                        <input type="search" name="q" value="@Model.Busqueda" aria-label="Buscar" placeholder="Buscar…" />
+                    </form>
+                </div>
+            </header>
+            @if (Model.Filas.Count > 0)
+            {
+                <div class="tabla-contenedor alta">
+                    <table class="ranking con-puesto tabla-ranking-estilo@(porAgente ? " con-sector" : "")" data-mapa>
+                        <thead>
+                            <tr>
+                                <th scope="col" aria-sort="@SentidoDe("texto")"><a class="ordenar" href="@Model.UrlOrden("texto")" data-parcial>@agrupacion.Texto</a></th>
+                                @if (porAgente)
+                                {
+                                    <th scope="col"><span class="cab-columna">Sector</span></th>
+                                }
+                                @foreach (var c in PaginaRankingEstiloGaia.Columnas)
+                                {
+                                    <th scope="col" class="num" data-sentido="@c.Sentido" aria-sort="@SentidoDe(c.Clave)" title="@c.Ayuda">
+                                        <a class="ordenar" href="@Model.UrlOrden(c.Clave)" data-parcial>@c.Titulo</a>
+                                    </th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var fila in Model.Filas)
+                            {
+                                <tr>
+                                    <td class="celda-nombre" title="@fila.Texto@(porAgente ? " · " + fila.Sector + " · oleada " + fila.Oleada : "")">
+                                        <div class="nombre-fila">
+                                            <span class="nombre-texto">@fila.Texto</span>
+                                            @if (porAgente && fila.Oleada.Length > 0)
+                                            {
+                                                <span class="pastilla-dato" title="Oleada @fila.Oleada">@fila.Oleada</span>
+                                            }
+                                        </div>
+                                    </td>
+                                    @if (porAgente)
+                                    {
+                                        <td>@fila.Sector</td>
+                                    }
+                                    @foreach (var c in PaginaRankingEstiloGaia.Columnas)
+                                    {
+                                        var v = c.Valor(fila.Indicadores);
+                                        <td class="num@(c.Clave == "llamadas" ? " barra-volumen" : "")" data-valor="@Formato.Crudo(v)">@CeldaRanking(v, c)</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr class="total">
+                                <td>TOTAL</td>
+                                @if (porAgente)
+                                {
+                                    <td></td>
+                                }
+                                @foreach (var c in PaginaRankingEstiloGaia.Columnas)
+                                {
+                                    <td class="num">@CeldaRanking(c.Valor(t), c)</td>
+                                }
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <p class="vacio corto">
+                    @if (!string.IsNullOrEmpty(Model.Busqueda))
+                    {
+                        @:Nada coincide con «@Model.Busqueda».
+                    }
+                    else
+                    {
+                        @:Ninguna llamada cumple estos filtros.
+                    }
+                </p>
+            }
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Ranking tipológico por motivo @Model.NivelMotivo</h2>
+                <span class="tarjeta-nota">@Formato.Entero(Model.Tipologico.Count) motivos, de más a menos llamadas@(siguiente <= 3 ? " · pulsa una fila para ver su Motivo " + siguiente : "")</span>
+                <div class="barra-tarjeta">
+                    <div class="pestanas-vista" role="group" aria-label="Nivel de motivo">
+                        @foreach (var n in new[] { 1, 2, 3 })
+                        {
+                            <a class="segmento@(n == Model.NivelMotivo ? " activo" : "")" href="@Model.UrlNivelMotivo(n)" data-parcial
+                               aria-current="@(n == Model.NivelMotivo ? "true" : null)">Motivo @n</a>
+                        }
+                    </div>
+                </div>
+            </header>
+            @if (Model.Tipologico.Count > 0)
+            {
+                <div class="tabla-contenedor alta">
+                    <table class="ranking tabla-tipologico" data-mapa>
+                        <thead>
+                            <tr>
+                                <th scope="col"><span class="cab-columna">Motivo @Model.NivelMotivo</span></th>
+                                @foreach (var c in PaginaRankingEstiloGaia.Columnas)
+                                {
+                                    <th scope="col" class="num" data-sentido="@c.Sentido" title="@c.Ayuda"><span class="cab-columna">@c.Titulo</span></th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (var k = 0; k < Model.Tipologico.Count; k++)
+                            {
+                                var nodo = Model.Tipologico[k];
+                                var id = "motivo-" + k;
+                                var conHijos = nodo.Hijos.Count > 0;
+                                <tr class="@(conHijos ? "fila-padre" : null)" data-hijos="@(conHijos ? id : null)" aria-expanded="@(conHijos ? "false" : null)">
+                                    <td class="celda-nombre" title="@MotivoDe(nodo.Clave)">
+                                        <div class="nombre-fila"><span class="mas@(conHijos ? "" : " sin")"></span><span class="nombre-texto">@MotivoDe(nodo.Clave)</span></div>
+                                    </td>
+                                    @foreach (var c in PaginaRankingEstiloGaia.Columnas)
+                                    {
+                                        var v = c.Valor(nodo.Indicadores);
+                                        <td class="num@(c.Clave == "llamadas" ? " barra-volumen" : "")" data-valor="@Formato.Crudo(v)">@CeldaRanking(v, c)</td>
+                                    }
+                                </tr>
+                                @foreach (var hijo in nodo.Hijos)
+                                {
+                                    <tr class="hija" data-padre="@id" hidden>
+                                        <td class="celda-nombre" title="@MotivoDe(hijo.Clave)">
+                                            <div class="nombre-fila"><span class="mas sin"></span><span class="nombre-texto">@MotivoDe(hijo.Clave)</span></div>
+                                        </td>
+                                        @foreach (var c in PaginaRankingEstiloGaia.Columnas)
+                                        {
+                                            var v = c.Valor(hijo.Indicadores);
+                                            <td class="num" data-valor="@Formato.Crudo(v)">@CeldaRanking(v, c)</td>
+                                        }
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr class="total">
+                                <td>TOTAL</td>
+                                @foreach (var c in PaginaRankingEstiloGaia.Columnas)
+                                {
+                                    <td class="num">@CeldaRanking(c.Valor(t), c)</td>
+                                }
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <p class="vacio corto">Ninguna llamada de estos filtros trae motivo.</p>
+            }
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Adherencia por etapa</h2>
+                <span class="tarjeta-nota">de la preconexión al aseguramiento</span>
+            </header>
+            @await Html.PartialAsync("_ColumnasGaia", Grafico("etapa", Model.PorEtapa, ("Adherencia", "serie-a", i => i.Adherencia)) with { Descripcion = "Adherencia por etapa de formación" })
+        </section>
+
+        <section class="tarjeta">
+            <header class="tarjeta-cabecera">
+                <h2>Cada agente en cada etapa</h2>
+                <span class="tarjeta-nota">adherencia, de peor a mejor</span>
+            </header>
+            <p class="nota-ns">
+                Los agentes que más ayuda necesitan, arriba. Las celdas vacías son etapas sin llamadas. Color de la adherencia:
+                <span class="muestra-tinte mapa-rojo">baja</span>
+                <span class="muestra-tinte mapa-ambar">media</span>
+                <span class="muestra-tinte mapa-verde">alta</span>
+            </p>
+            <div class="tabla-contenedor alta">
+                <table class="ranking con-puesto tabla-matriz-gaia">
+                    <thead>
+                        <tr>
+                            <th scope="col"><span class="cab-columna">Agente</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Llamadas</span></th>
+                            <th scope="col" class="num"><span class="cab-columna">Adherencia</span></th>
+                            @foreach (var etapa in Model.Etapas)
+                            {
+                                <th scope="col" class="num" title="@EtapaLegible(etapa)"><span class="cab-columna">@EtapaCorta(etapa)</span></th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var fila in Model.AgentesEtapa)
+                        {
+                            Model.MatrizEtapas.TryGetValue(fila.IdAgente, out var porEtapa);
+                            <tr>
+                                <td class="celda-nombre" title="@fila.Agente · @fila.Sector · oleada @fila.Oleada"><div class="nombre-fila"><span class="nombre-texto">@fila.Agente</span><span class="pastilla-dato" title="Oleada @fila.Oleada">@fila.Oleada</span></div></td>
+                                <td class="num barra-volumen" data-valor="@fila.Indicadores.Llamadas">@Formato.Entero(fila.Indicadores.Llamadas)</td>
+                                <td class="num @MapaAdherencia(fila.Indicadores.Adherencia)">@Formato.Porcentaje(fila.Indicadores.Adherencia)</td>
+                                @foreach (var etapa in Model.Etapas)
+                                {
+                                    if (porEtapa is not null && porEtapa.TryGetValue(etapa, out var v))
+                                    {
+                                        <td class="num @MapaAdherencia(v)">@Formato.Porcentaje(v)</td>
+                                    }
+                                    else
+                                    {
+                                        <td class="num"></td>
+                                    }
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="total">
+                            <td>TOTAL</td>
+                            <td class="num">@Formato.Entero(t.Llamadas)</td>
+                            <td class="num">@Formato.Porcentaje(t.Adherencia)</td>
+                            @foreach (var etapa in Model.Etapas)
+                            {
+                                <td class="num">@Formato.Porcentaje(Model.PorEtapa.FirstOrDefault(g => g.Clave == etapa)?.Indicadores.Adherencia)</td>
+                            }
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+    }
+}

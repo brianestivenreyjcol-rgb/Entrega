@@ -1,0 +1,121 @@
+@model MenuModelo
+@* Portada: la portada de módulos del portal SOLARIS. Tres tarjetas de informe (icono de trazo, etiqueta, título,
+   descripción y, abajo, el estado de sus datos con el botón de flecha). El color de marca solo queda en el logotipo:
+   la página va en marino y grises (data-marca="portada"). El estado de cada informe llega en el modelo. *@
+@{
+    ViewData["Title"] = "Menú";
+    ViewData["Marca"] = "portada";
+
+    // «Datos cargados a las 11:02» (con el día si no son de hoy).
+    string Cargados(DateTime cuando)
+        => cuando.Date == DateTime.Today ? "Datos cargados a las " + cuando.ToString("HH:mm", Formato.Es)
+           : "Datos cargados el " + cuando.ToString("dd/MM", Formato.Es) + " a las " + cuando.ToString("HH:mm", Formato.Es);
+
+    // General
+    var generalOk = Model.Datos is not null;
+    var generalTexto = Model.Datos is { } d0 ? Cargados(d0.CargadoEn) : Model.Error is not null ? "No se pudieron cargar los datos" : "Cargando los datos…";
+    string? generalDetalle = Model.Datos is { } d1
+        ? Formato.Entero(d1.Filas.Count) + " auditorías" + (d1.PrimeraFecha is { } p1 && d1.UltimaFecha is { } u1 ? " · del " + Formato.Fecha(p1) + " al " + Formato.Fecha(u1) : "")
+        : null;
+
+    // CDM No solución y GAIA Formación
+    var nsCuando = Model.NoSolucion.Cargado;
+    var nsEnCurso = Model.NoSolucion.EnCurso;
+    var gaiaCuando = Model.Gaia.Cargado;
+    var gaiaEnCurso = Model.Gaia.EnCurso;
+}
+<partial name="_Cabecera" model="new CabeceraModelo()" />
+
+<main class="portada">
+    <section class="portada-hero">
+        <div class="portada-marca" aria-hidden="true">
+            @Iconos.Logotipo()
+            <span class="portada-marca-texto"><b>CDM</b><span>Auditorías</span></span>
+        </div>
+        <div class="portada-hero-texto">
+            <p class="portada-kicker">3 informes</p>
+            <h1 class="portada-titulo">Informes de calidad y formación</h1>
+            <p class="portada-lema">Elige el informe con el que quieres trabajar. Cada tarjeta dice si sus datos ya están cargados.</p>
+        </div>
+    </section>
+
+    @* «Formación & Calidad» no tiene tarjeta: se abre desde las pestañas de General (lo pidió el usuario el 02-10-2026).
+       CDM No solución (traído de ranking-mvc el 05-10-2026) y GAIA Formación (06-10-2026) son otros informes, con sus
+       propios datos y filtros, y por eso sí la tienen. *@
+    <nav class="modulos" aria-label="Informes">
+        <a class="modulo" href="/general">
+            <div class="modulo-cab">
+                <span class="modulo-icono">@Iconos.Svg("columnas")</span>
+                <span class="etiqueta">Informe</span>
+            </div>
+            <h2><small>CDM · Calidad</small>General</h2>
+            <p class="descripcion">Vista general de auditorías y seguimiento operativo. Dentro, en las pestañas, está también Formación &amp; Calidad.</p>
+            <div class="modulo-pie">
+                <div class="modulo-pie-texto">
+                    <span class="modulo-estado@(generalOk ? " ok" : "")">@generalTexto</span>
+                    @if (generalDetalle is not null)
+                    {
+                        <span class="detalle">@generalDetalle</span>
+                    }
+                </div>
+                <span class="flecha">@Iconos.Svg("flecha")</span>
+            </div>
+        </a>
+        <a class="modulo" href="/nosolucion">
+            <div class="modulo-cab">
+                <span class="modulo-icono">@Iconos.Svg("no-resuelta")</span>
+                <span class="etiqueta">Informe</span>
+            </div>
+            <h2><small>CDM · Bogotá</small>CDM No solución</h2>
+            <p class="descripcion">Encuesta de solución de las llamadas de Call Bogotá (YOIGO, MASMOVIL, JAZZTEL y ORANGE): evolución, equipos, motivos y sin acceso a internet.</p>
+            <div class="modulo-pie">
+                <div class="modulo-pie-texto">
+                    @if (nsCuando is { } nc)
+                    {
+                        <span class="modulo-estado ok">@Cargados(nc)</span>
+                        <span class="detalle">Se renueva sola cada 12 h</span>
+                    }
+                    else if (nsEnCurso)
+                    {
+                        <span class="modulo-estado en-curso">Trayendo los datos…</span>
+                        <span class="detalle">Tarda alrededor de un minuto</span>
+                    }
+                    else
+                    {
+                        <span class="modulo-estado">Datos sin cargar</span>
+                        <span class="detalle">Se traen al abrir el informe</span>
+                    }
+                </div>
+                <span class="flecha">@Iconos.Svg("flecha")</span>
+            </div>
+        </a>
+        <a class="modulo" href="/gaia">
+            <div class="modulo-cab">
+                <span class="modulo-icono">@Iconos.Svg("birrete")</span>
+                <span class="etiqueta">Informe</span>
+            </div>
+            <h2><small>GAIA · Agentes nuevos</small>GAIA Formación</h2>
+            <p class="descripcion">Seguimiento de los agentes nuevos en sus días de preconexión y aseguramiento: adherencia al estilo, rellamada, no solución, ventas y las llamadas una a una.</p>
+            <div class="modulo-pie">
+                <div class="modulo-pie-texto">
+                    @if (gaiaCuando is { } gc)
+                    {
+                        <span class="modulo-estado ok">@Cargados(gc)</span>
+                        <span class="detalle">Se actualiza sola al guardar el Excel de nómina</span>
+                    }
+                    else if (gaiaEnCurso)
+                    {
+                        <span class="modulo-estado en-curso">Trayendo los datos…</span>
+                        <span class="detalle">Tarda alrededor de un minuto</span>
+                    }
+                    else
+                    {
+                        <span class="modulo-estado">Datos sin cargar</span>
+                        <span class="detalle">Se traen al abrir el informe</span>
+                    }
+                </div>
+                <span class="flecha">@Iconos.Svg("flecha")</span>
+            </div>
+        </a>
+    </nav>
+</main>

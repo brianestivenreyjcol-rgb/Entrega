@@ -1,0 +1,144 @@
+@model GraficoGaia
+@* Líneas por día o semana con una o varias series (porcentajes, segundos o recuentos) en el estilo único de las gráficas de línea
+   (07-10-2026, el de «indicador + volumen» del portal): cada serie suavizada con su color de la paleta de la marca; bajo la
+   primera, un área en degradado que se desvanece; las llamadas (o la base, o las auditorías) como columnas grises claras detrás,
+   en el mismo plano, con su cifra pequeña gris encima; el eje Y ajustado al rango de los datos (no desde 0) y una pastilla en cada
+   punto (con dos series, la mayor encima y la menor debajo; con más de ~20 periodos, una de cada pocas y siempre la primera y la
+   última). Dos series con escalas muy distintas: eje izquierdo para la primera y derecho para la segunda. Una banda con
+   <title> por periodo da la ficha. Sin líneas de media, meta ni umbrales. *@
+@{
+    var n = Math.Max(1, Model.Etiquetas.Count);
+    var series = Model.Series;
+    var doble = Doble(Model);
+    (double Bajo, double Alto) Rango(IEnumerable<double> valores)
+    {
+        var l = valores.ToList();
+        if (l.Count == 0) return (0, 1);
+        var min = l.Min();
+        var max = l.Max();
+        var r = max - min;
+        if (r <= 0) r = Math.Max(Math.Abs(max) * 0.05, Model.Segundos ? 1 : 0.01);
+        var bajo = min - r * 0.1;
+        if (min >= 0 && bajo < 0) bajo = 0;
+        return (bajo, max + r * 0.1);
+    }
+    IEnumerable<double> De(SerieGaia s) => s.Valores.Where(v => v is not null).Select(v => v!.Value);
+    var rangos = doble ? series.Select(s => Rango(De(s))).ToArray() : new[] { Rango(series.SelectMany(De)) };
+    (double Bajo, double Alto) R(int k) => rangos[doble ? k : 0];
+    double Y(int k, double v) => 1 - (v - R(k).Bajo) / (R(k).Alto - R(k).Bajo);
+    double X(int i) => (i + 0.5) / n;
+    var conPuntos = n <= 45;
+    var rotulados = Rotulados(Model);
+    var pasoX = Math.Max(1, (int)Math.Ceiling(n / (double)Model.MaxEtiquetasX));
+    var maxVol = Math.Max(1, Model.Volumen.DefaultIfEmpty(1).Max());
+    var ancho = Math.Min(0.05, 0.62 / n);
+    var conVolumen = Model.ConVolumen && Model.Volumen.Any(v => v > 0);
+    var marcas = Enumerable.Range(0, 4).ToList();
+    double Marca(int k, int m) => R(k).Bajo + (R(k).Alto - R(k).Bajo) * m / 3;
+    var trazos = Enumerable.Range(0, series.Count)
+        .Select(k => TrazosSuaves(series[k].Valores.Select(v => v is { } x ? (double?)Y(k, x) : null).ToList(), X)).ToArray();
+    var idDegradado = "deg-" + Math.Abs((Model.Descripcion + "|" + n).GetHashCode());
+}
+@if (Model.ConLeyenda)
+{
+    <div class="leyenda-ns centrada">
+        @if (conVolumen)
+        {
+            <span class="serie-gris"><i></i>@Model.NombreVolumen</span>
+        }
+        @for (var k = 0; k < series.Count; k++)
+        {
+            <span class="@series[k].Clase"><i></i>@series[k].Nombre@(doble ? (k == 0 ? " (eje izquierdo)" : " (eje derecho)") : "")</span>
+        }
+    </div>
+}
+<figure class="grafica lineas-ns indicador-fig" role="img" aria-label="@Model.Descripcion">
+    <div class="plano">
+        <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
+            <g class="@series[0].Clase">
+                <defs>
+                    <linearGradient id="@idDegradado" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" class="degradado-ini" />
+                        <stop offset="1" class="degradado-fin" />
+                    </linearGradient>
+                </defs>
+            </g>
+            @foreach (var m in marcas)
+            {
+                <line class="rejilla-linea" x1="0" x2="1000" y1="@C(Y(0, Marca(0, m)))" y2="@C(Y(0, Marca(0, m)))" vector-effect="non-scaling-stroke" />
+            }
+            @if (conVolumen)
+            {
+                for (var i = 0; i < Model.Volumen.Count; i++)
+                {
+                    var h = 0.34 * Model.Volumen[i] / maxVol;
+                    <rect class="columna-gris" data-i="@i" x="@C(X(i) - ancho / 2)" y="@C(1 - h)" width="@C(ancho)" height="@C(h)" vector-effect="non-scaling-stroke" />
+                }
+            }
+            <path class="indicador-area" d="@trazos[0].Area" fill="url(#@idDegradado)" />
+            @for (var k = 0; k < series.Count; k++)
+            {
+                <g class="@series[k].Clase"><path class="crono-linea" d="@trazos[k].Linea" vector-effect="non-scaling-stroke" /></g>
+            }
+            @for (var i = 0; i < Model.Etiquetas.Count; i++)
+            {
+                <rect class="banda" data-i="@i" data-x="@Formato.Coord(X(i))" x="@C((double)i / n)" y="0" width="@C(1.0 / n)" height="1000"><title>@Ficha(Model, i)</title></rect>
+            }
+        </svg>
+        @foreach (var m in marcas)
+        {
+            <span class="eje-y" style="top:@P(Y(0, Marca(0, m)))">@Valor(Marca(0, m), Model)</span>
+        }
+        @if (doble)
+        {
+            foreach (var m in marcas)
+            {
+                <span class="eje-y derecho" style="top:@P(Y(1, Marca(1, m)))">@Valor(Marca(1, m), Model)</span>
+            }
+        }
+        @if (conPuntos)
+        {
+            for (var k = 0; k < series.Count; k++)
+            {
+                for (var i = 0; i < series[k].Valores.Count; i++)
+                {
+                    if (series[k].Valores[i] is not { } v) continue;
+                    <span class="punto @series[k].Clase" data-i="@i" style="left:@P(X(i));top:@P(Y(k, v))"></span>
+                }
+            }
+        }
+        @if (conVolumen)
+        {
+            for (var i = 0; i < Model.Volumen.Count; i++)
+            {
+                if (!rotulados.Contains(i)) continue;
+                <span class="valor-volumen" style="left:@P(X(i));top:@P(1 - 0.34 * Model.Volumen[i] / maxVol)">@Formato.Entero(Model.Volumen[i])</span>
+            }
+        }
+        @for (var k = 0; k < series.Count; k++)
+        {
+            for (var i = 0; i < series[k].Valores.Count; i++)
+            {
+                if (!rotulados.Contains(i) || series[k].Valores[i] is not { } v) continue;
+                var y = Y(k, v);
+                var arriba = true;
+                if (series.Count == 2 && series[1 - k].Valores[i] is { } otro)
+                {
+                    var yOtro = Y(1 - k, otro);
+                    arriba = y < yOtro || (y == yOtro && k == 0);
+                }
+                // Una pastilla «debajo» de un punto pegado al eje X pisaría sus fechas; una «encima» de uno pegado al techo se saldría.
+                if (!arriba && y > 0.9) arriba = true;
+                else if (arriba && y < 0.06 && series.Count == 2) arriba = false;
+                <span class="etiqueta-punto @series[k].Clase @(arriba ? "arriba" : "abajo")@(i == 0 ? " al-inicio" : i == n - 1 ? " al-final" : "")" style="left:@P(X(i));top:@P(y)">@Valor(v, Model)</span>
+            }
+        }
+        @for (var i = 0; i < Model.Etiquetas.Count; i++)
+        {
+            if (i == Model.Etiquetas.Count - 1 || (i % pasoX == 0 && Model.Etiquetas.Count - 1 - i >= pasoX))
+            {
+                <span class="eje-x" style="left:@P(X(i))">@Model.Etiquetas[i]</span>
+            }
+        }
+    </div>
+</figure>

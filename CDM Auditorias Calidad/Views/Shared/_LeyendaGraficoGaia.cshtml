@@ -1,0 +1,22 @@
+@model GraficoGaia
+@* La leyenda de una gráfica, arriba y centrada: un punto de color con el nombre de cada serie (y su eje si hay dos).
+   Sin medias, metas ni umbrales (pedido del usuario el 07-10-2026). *@
+@{
+    var doble = Doble(Model);
+    var porEtapa = Model.PorEtapa && Model.Series.Count == 1;
+}
+<div class="leyenda-ns centrada">
+    @if (porEtapa)
+    {
+        <span class="etapa-pre"><i></i>Preconexión</span>
+        <span class="etapa-aseg"><i></i>Aseguramiento</span>
+    }
+    else
+    {
+        for (var k = 0; k < Model.Series.Count; k++)
+        {
+            var s = Model.Series[k];
+            <span class="@s.Clase"><i></i>@s.Nombre@(doble ? (k == 0 ? " (eje izquierdo)" : " (eje derecho)") : "")</span>
+        }
+    }
+</div>

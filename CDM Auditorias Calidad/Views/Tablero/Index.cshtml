@@ -1,0 +1,10 @@
+@model TableroModelo
+@{
+    ViewData["Title"] = Model.Pagina.Titulo;
+}
+@{
+    ViewData["Area"] = "Auditorías";
+    ViewData["Migas"] = new[] { "Auditorías", Model.Pagina.Titulo };
+}
+<partial name="_Cabecera" model="new CabeceraModelo(TableroModelo.TituloInforme, Model.Pagina.Titulo)" />
+<partial name="_Informe" model="Model" />

@@ -1,0 +1,61 @@
+@model CabeceraModelo
+@* Cabecera pegajosa del portal SOLARIS: logotipo con el área a la izquierda, título grande con las migas debajo y, a la
+   derecha, botones con borde (Imprimir, Presentar y Tema). Cada vista fija ViewData["Area"] («Auditorías», «No solución»,
+   «GAIA») y ViewData["Migas"] (string[]: «CDM» se pone solo; la última miga es la página actual y site.js la cambia al
+   pasar de pestaña sin recargar, con #informe[data-miga]). En la portada no hay título ni migas: lleva el lema. *@
+@{
+    var area = ViewData["Area"] as string;
+    var migas = ViewData["Migas"] as string[] ?? [];
+}
+<header class="cabecera">
+    <div class="cabecera-marca">
+        <a class="cabecera-logo" href="/" title="Volver al menú">
+            @Iconos.Logotipo()
+            <span class="logo-texto"><span>CDM</span>@if (area is not null)
+            {
+                <span class="logo-area">@area</span>
+            }</span>
+        </a>
+    </div>
+    <div class="cabecera-titulo">
+        @if (Model.Titulo is not null)
+        {
+            <h1>@Model.Titulo</h1>
+            @if (migas.Length > 0)
+            {
+                <nav class="migas" aria-label="Migas de pan">
+                    <a href="/">CDM</a>
+                    @for (var i = 0; i < migas.Length; i++)
+                    {
+                        <span class="miga-sep" aria-hidden="true">›</span>
+                        @if (i == migas.Length - 1)
+                        {
+                            <span class="miga-actual" aria-current="page">@migas[i]</span>
+                        }
+                        else
+                        {
+                            <span class="miga-area">@migas[i]</span>
+                        }
+                    }
+                </nav>
+            }
+        }
+        else
+        {
+            <span class="cabecera-lema">@(Model.Subtitulo ?? "Auditorías de calidad y formación")</span>
+        }
+    </div>
+    <div class="cabecera-acciones">
+        <button type="button" class="btn-tema" data-imprimir>@Iconos.Svg("imprimir") Imprimir</button>
+        @if (Model.Titulo is not null)
+        {
+            <button type="button" class="btn-tema" data-presentar title="Pantalla completa del contenido, sin filtros">@Iconos.Svg("presentar") Presentar</button>
+        }
+        <button type="button" class="btn-tema" data-boton-tema aria-label="Cambiar el tema">
+            <span class="tema-icono tema-auto">@Iconos.Svg("tema-auto")</span>
+            <span class="tema-icono tema-claro">@Iconos.Svg("sol")</span>
+            <span class="tema-icono tema-oscuro">@Iconos.Svg("luna")</span>
+            <span data-tema-texto>Tema</span>
+        </button>
+    </div>
+</header>
