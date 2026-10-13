@@ -62,19 +62,22 @@ public static class ExportadorExcel
     }
 
     /// <summary>
-    /// «T0 y planes de acción»: cada auditoría con Tolerancia 0 con su alerta T0 y su plan, para revisar
-    /// una por una las que no cumplen la regla.
+    /// «T0 y planes de acción»: cada auditoría con T0 con su fila de [Reporting].[pdc].[Reportar_T0] (si está), para
+    /// revisar una por una las que no se reportaron o no tienen plan.
     /// </summary>
     public static byte[] GenerarT0(IReadOnlyList<AuditoriaT0> filas, string titulo)
     {
         using var libro = new XLWorkbook();
         var hoja = libro.AddWorksheet("Auditorias T0");
 
-        // (cabecera, ancho, valor, formato)
+        // (cabecera, ancho, valor, formato); las columnas «… (Reportar_T0)» salen de la fila de Reportar_T0.
         var columnas = new (string Cabecera, double Ancho, Func<AuditoriaT0, XLCellValue> Valor, string? Formato)[]
         {
-            ("Situación", 18, a => TextosT0.Texto(a.Situacion), null),
+            ("Situación", 20, a => TextosT0.Texto(a.Situacion), null),
             ("Fecha auditoría", 13, a => a.Fecha.ToDateTime(TimeOnly.MinValue), "dd/mm/yyyy"),
+            ("Auditor", 30, a => Texto(a.NombreAuditor), null),
+            ("Legajo auditor", 12, a => Numero(a.LegajoAuditor), null),
+            ("Cargo auditor", 22, a => Texto(a.CargoAuditor), null),
             ("Sector", 26, a => Texto(a.Sector), null),
             ("Super", 28, a => Texto(a.Super), null),
             ("Team", 28, a => Texto(a.Team), null),
@@ -83,26 +86,24 @@ public static class ExportadorExcel
             ("Plantilla", 26, a => Texto(a.Plantilla), null),
             ("Infracción T0", 50, a => Texto(a.Infraccion), null),
             ("Nota", 9, a => a.Nota is { } n ? n : Blank.Value, "0.00 %"),
-            ("Auditor", 30, a => Texto(a.NombreAuditor), null),
-            ("Cargo auditor", 22, a => Texto(a.CargoAuditor), null),
             ("ID gestión ICEBERG", 14, a => a.IdGestion, null),
             ("ID llamada", 38, a => Texto(a.IdLlamada), null),
-            ("Cómo se encontró la alerta", 22, a => Texto(a.Cruce), null),
-            ("ID alerta T0", 11, a => Numero(a.IdAlerta), null),
-            ("Fecha reporte T0", 16, a => Momento(a.FechaReporteT0), "dd/mm/yyyy hh:mm"),
-            ("Gravedad", 13, a => Texto(a.Gravedad), null),
-            ("Estado alerta", 13, a => Texto(a.EstadoAlerta), null),
-            ("Acción", 20, a => Texto(a.Accion), null),
-            ("ID acción", 11, a => Numero(a.IdAccion), null),
-            ("Fecha gestionado", 16, a => Momento(a.FechaGestionado), "dd/mm/yyyy hh:mm"),
-            ("Gestionador", 30, a => Texto(a.Gestionador), null),
-            ("Cargo gestionador", 22, a => Texto(a.CargoGestionador), null),
-            ("ID plan (PlanAccion)", 13, a => Numero(a.IdPlan), null),
-            ("Fecha plan", 16, a => Momento(a.FechaPlan), "dd/mm/yyyy hh:mm"),
-            ("Estado plan", 12, a => Texto(a.EstadoPlan), null),
-            ("Motivo plan", 26, a => Texto(a.MotivoPlan), null),
-            ("Plan «Acción de Calidad» 0-15 días", 16, a => Numero(a.IdPlanCalidad), null),
-            ("Fecha plan «Acción de Calidad»", 16, a => Momento(a.FechaPlanCalidad), "dd/mm/yyyy hh:mm"),
+            ("Cómo se encontró", 22, a => Texto(a.Cruce), null),
+            ("ID (Reportar_T0)", 12, a => Numero(a.Reporte?.Id), null),
+            ("Fecha reporte (Reportar_T0)", 16, a => Momento(a.Reporte?.Reporte), "dd/mm/yyyy hh:mm"),
+            ("Auditor (Reportar_T0)", 30, a => Texto(a.Reporte?.NombreAuditor), null),
+            ("Gravedad (Reportar_T0)", 14, a => Texto(a.Reporte?.Gravedad), null),
+            ("Estado (Reportar_T0)", 13, a => Texto(a.Reporte?.Estado), null),
+            ("Acción (Reportar_T0)", 20, a => Texto(a.Reporte?.Accion), null),
+            ("ID acción (Reportar_T0)", 12, a => Numero(a.Reporte?.IdAccion), null),
+            ("Fecha gestionado (Reportar_T0)", 16, a => Momento(a.Reporte?.Gestionado), "dd/mm/yyyy hh:mm"),
+            ("Días hasta gestionar", 11, a => a.Reporte?.DiasGestion is { } d ? Math.Round(d, 1) : Blank.Value, "0.0"),
+            ("Gestionador (Reportar_T0)", 30, a => Texto(a.Reporte?.Gestionador), null),
+            ("Cargo gestionador (Reportar_T0)", 22, a => Texto(a.Reporte?.CargoGestionador), null),
+            ("Observaciones reporte (Reportar_T0)", 50, a => Texto(a.Reporte?.ObservacionesReporte), null),
+            ("Observaciones respuesta (Reportar_T0)", 50, a => Texto(a.Reporte?.ObservacionesRespuesta), null),
+            ("Motivo llamada (Reportar_T0)", 26, a => Texto(a.Reporte?.MotivoLlamada), null),
+            ("Oportunidad de mejora (Reportar_T0)", 30, a => Texto(a.Reporte?.OportunidadMejora), null),
         };
 
         for (var c = 0; c < columnas.Length; c++) hoja.Cell(1, c + 1).Value = columnas[c].Cabecera;

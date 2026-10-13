@@ -86,75 +86,95 @@ public sealed class RepositorioAuditorias
             }
         }
 
-        // Las T0 y sus planes también van aparte: si RecursosHumanos no responde, solo esa pestaña sale sin datos.
+        // Las T0 también van aparte: si Reportar_T0 no responde, solo esa pestaña sale sin datos.
         IReadOnlyList<AuditoriaT0>? t0 = null;
-        IReadOnlyDictionary<DateOnly, int>? planesPorDia = null;
+        IReadOnlyList<AlertaT0>? reportesT0 = null;
         string? errorT0 = null;
         try
         {
-            (t0, planesPorDia) = await CargarT0Async(cn, op.SegundosConsulta, ct);
+            (t0, reportesT0) = await CargarT0Async(cn, op.SegundosConsulta, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             errorT0 = ex.Message;
         }
 
-        return new InstantaneaAuditorias(filas, DateTime.Now, reloj.Elapsed, nomina, errorNomina, t0, errorT0, planesPorDia);
+        return new InstantaneaAuditorias(filas, DateTime.Now, reloj.Elapsed, nomina, errorNomina, t0, reportesT0, errorT0);
     }
 
     public string RutaConsultaT0 => Path.Combine(_entorno.ContentRootPath, "Consultas", "AuditoriasT0.sql");
 
     /// <summary>
-    /// Las auditorías con Tolerancia 0, con su alerta y su plan (primer resultado de la consulta), y los planes
-    /// creados cada día en <c>Legal.PlanAccion</c> (segundo resultado).
+    /// Las auditorías con T0 (primer resultado) y las filas de <c>[Reporting].[pdc].[Reportar_T0]</c> (segundo); cada
+    /// auditoría queda enlazada con su fila por <c>IdReporte</c>.
     /// </summary>
-    private async Task<(IReadOnlyList<AuditoriaT0>, IReadOnlyDictionary<DateOnly, int>)> CargarT0Async(SqlConnection cn, int segundos, CancellationToken ct)
+    private async Task<(IReadOnlyList<AuditoriaT0>, IReadOnlyList<AlertaT0>)> CargarT0Async(SqlConnection cn, int segundos, CancellationToken ct)
     {
         var sql = await File.ReadAllTextAsync(RutaConsultaT0, ct);
         await using var cmd = new SqlCommand(sql, cn) { CommandTimeout = segundos };
         await using var rd = await cmd.ExecuteReaderAsync(ct);
 
-        int O(string nombre) => rd.GetOrdinal(nombre);
-        int iFecha = O("Fecha"), iLegajo = O("legajo"), iSector = O("Sector"), iSuper = O("Super"), iTeam = O("Team"),
-            iAgente = O("Agente"), iGestion = O("IdGestion"), iLlamada = O("ID_Llamada"), iCorreo = O("CorreoAuditor"),
-            iAuditor = O("Nombre_Auditor"), iCargo = O("Cargo_Auditor"), iPlantilla = O("Plantilla"), iInfraccion = O("Infraccion"),
-            iNota = O("Respuesta"), iAlerta = O("IdAlerta"), iCruce = O("Cruce"), iReporte = O("FechaReporteT0"),
-            iGravedad = O("Gravedad"), iEstado = O("EstadoAlerta"), iAccion = O("Accion"), iIdAccion = O("ID_Accion"),
-            iGestionado = O("FechaGestionado"), iGestionador = O("Gestionador"), iCargoGest = O("CargoGestionador"),
-            iPlan = O("IdPlan"), iFechaPlan = O("FechaPlan"), iEstadoPlan = O("EstadoPlan"), iMotivo = O("MotivoPlan"),
-            iPlanCalidad = O("IdPlanCalidad"), iFechaPlanCalidad = O("FechaPlanCalidad");
-
         DateTime? Momento(int i) => rd.IsDBNull(i) ? null : rd.GetDateTime(i);
         long? Numero(int i) => rd.IsDBNull(i) ? null : Convert.ToInt64(rd.GetValue(i), CultureInfo.InvariantCulture);
 
-        var t0 = new List<AuditoriaT0>(4_000);
-        while (await rd.ReadAsync(ct))
+        var auditorias = new List<AuditoriaT0>(4_000);
         {
-            if (rd.IsDBNull(iFecha) || Numero(iGestion) is not { } gestion) continue;
-            t0.Add(new AuditoriaT0(
-                DateOnly.FromDateTime(rd.GetDateTime(iFecha)),
-                Legajo(rd, iLegajo),
-                Texto(rd, iSector), Texto(rd, iSuper), Texto(rd, iTeam), Texto(rd, iAgente),
-                gestion,
-                Texto(rd, iLlamada), Texto(rd, iCorreo), Texto(rd, iAuditor), Texto(rd, iCargo),
-                Texto(rd, iPlantilla), Texto(rd, iInfraccion),
-                rd.IsDBNull(iNota) ? null : Convert.ToDouble(rd.GetValue(iNota), CultureInfo.InvariantCulture),
-                Numero(iAlerta), Texto(rd, iCruce), Momento(iReporte), Texto(rd, iGravedad), Texto(rd, iEstado),
-                Texto(rd, iAccion), Numero(iIdAccion), Momento(iGestionado), Texto(rd, iGestionador), Texto(rd, iCargoGest),
-                Numero(iPlan), Momento(iFechaPlan), Texto(rd, iEstadoPlan), Texto(rd, iMotivo),
-                Numero(iPlanCalidad), Momento(iFechaPlanCalidad)));
-        }
-
-        var planesPorDia = new Dictionary<DateOnly, int>();
-        if (await rd.NextResultAsync(ct))
-        {
-            int iDia = rd.GetOrdinal("Dia"), iPlanes = rd.GetOrdinal("Planes");
+            int A(string nombre) => rd.GetOrdinal(nombre);
+            int iFecha = A("Fecha"), iLegajo = A("legajo"), iSector = A("Sector"), iSuper = A("Super"), iTeam = A("Team"),
+                iAgente = A("Agente"), iGestion = A("IdGestion"), iLlamada = A("ID_Llamada"), iLegAuditor = A("LegajoAuditor"),
+                iAuditor = A("Nombre_Auditor"), iCargo = A("Cargo_Auditor"), iPlantilla = A("Plantilla"), iInfraccion = A("Infraccion"),
+                iNota = A("Respuesta"), iReporte = A("IdReporte"), iCruce = A("Cruce");
             while (await rd.ReadAsync(ct))
-                if (!rd.IsDBNull(iDia))
-                    planesPorDia[DateOnly.FromDateTime(rd.GetDateTime(iDia))] = Convert.ToInt32(rd.GetValue(iPlanes), CultureInfo.InvariantCulture);
+            {
+                if (rd.IsDBNull(iFecha) || Numero(iGestion) is not { } gestion) continue;
+                auditorias.Add(new AuditoriaT0(
+                    DateOnly.FromDateTime(rd.GetDateTime(iFecha)),
+                    Legajo(rd, iLegajo),
+                    Texto(rd, iSector), Texto(rd, iSuper), Texto(rd, iTeam), Texto(rd, iAgente),
+                    gestion, Texto(rd, iLlamada), Numero(iLegAuditor), Texto(rd, iAuditor), Texto(rd, iCargo),
+                    Texto(rd, iPlantilla), Texto(rd, iInfraccion),
+                    rd.IsDBNull(iNota) ? null : Convert.ToDouble(rd.GetValue(iNota), CultureInfo.InvariantCulture),
+                    Numero(iReporte), Texto(rd, iCruce)));
+            }
         }
 
-        return (t0, planesPorDia);
+        if (!await rd.NextResultAsync(ct)) throw new InvalidOperationException("La consulta de T0 no devolvió las filas de Reportar_T0 (segundo resultado).");
+
+        var reportes = new List<AlertaT0>(10_000);
+        {
+            int O(string nombre) => rd.GetOrdinal(nombre);
+            int iId = O("ID"), iReporte = O("Fecha_reporte_Alerta"), iFalta = O("Fecha_Falta"), iLogin = O("Login"), iLegajo = O("Legajo_AG"),
+                iSector = O("Sector"), iSuper = O("Supervisor"), iTeam = O("Team"), iAgente = O("Agente"), iLlamada = O("ID_Llamada"),
+                iInfraccion = O("Infraccion"), iGravedad = O("Gravedad"), iObsReporte = O("Observaciones_Reporte"),
+                iLegAuditor = O("Auditor_Legajo"), iAuditor = O("Nombre_Auditor"), iCargo = O("Cargo_Auditor"), iEstado = O("Estado"),
+                iGestionado = O("Fecha_Gestionado"), iAccion = O("Accion"), iIdAccion = O("ID_Accion"), iObsRespuesta = O("Observaciones_Respuesta"),
+                iGestionador = O("Nombre_Gestionador"), iCargoGest = O("Cargo_Gestionador"), iCompromiso = O("compromiso_nocumplido"),
+                iExpediente = O("expediente"), iMotivo = O("MotivoLlamada"), iOportunidad = O("OportunidadMejora");
+
+            while (await rd.ReadAsync(ct))
+            {
+                if (Momento(iReporte) is not { } reporte || Numero(iId) is not { } id) continue;
+                reportes.Add(new AlertaT0(
+                    id,
+                    DateOnly.FromDateTime(reporte),
+                    reporte,
+                    Momento(iFalta) is { } falta ? DateOnly.FromDateTime(falta) : null,
+                    Numero(iLogin), Numero(iLegajo),
+                    Texto(rd, iSector), Texto(rd, iSuper), Texto(rd, iTeam), Texto(rd, iAgente),
+                    Texto(rd, iLlamada), Texto(rd, iInfraccion), Texto(rd, iGravedad), Texto(rd, iObsReporte),
+                    Numero(iLegAuditor), Texto(rd, iAuditor), Texto(rd, iCargo),
+                    Texto(rd, iEstado), Momento(iGestionado), Texto(rd, iAccion), Numero(iIdAccion), Texto(rd, iObsRespuesta),
+                    Texto(rd, iGestionador), Texto(rd, iCargoGest),
+                    !rd.IsDBNull(iCompromiso) && Convert.ToBoolean(rd.GetValue(iCompromiso), CultureInfo.InvariantCulture),
+                    Numero(iExpediente), Texto(rd, iMotivo), Texto(rd, iOportunidad)));
+            }
+        }
+
+        var porId = reportes.GroupBy(r => r.Id).ToDictionary(g => g.Key, g => g.First());
+        var enlazadas = auditorias
+            .Select(a => a.IdReporte is { } id && porId.TryGetValue(id, out var r) ? a with { Reporte = r } : a)
+            .ToList();
+        return (enlazadas, reportes);
     }
 
     public string RutaConsultaNomina => Path.Combine(_entorno.ContentRootPath, "Consultas", "Nomina.sql");

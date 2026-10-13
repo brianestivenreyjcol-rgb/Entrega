@@ -4,22 +4,16 @@ using CDM_Auditorias_Calidad.Models;
 namespace CDM_Auditorias_Calidad.Servicios.Tablero;
 
 /// <summary>
-/// Calcula la pestaña «T0 y planes de acción»: las auditorías de ICEBERG con Tolerancia 0 frente a su
-/// alerta T0 y su plan de acción (regla de negocio: cada auditoría con T0 debe tener un plan cargado).
-/// Lleva los filtros de General (fecha, mes, sector, super, team, auditor y cargo) más plantilla y
-/// situación. Cómo se une cada auditoría con su alerta y su plan: <c>Consultas/AuditoriasT0.sql</c> y
-/// docs/contexto/t0-planes.md.
+/// Calcula la pestaña «T0 y planes de acción»: por técnico de calidad / auditor, cuántas auditorías hizo, cuántas
+/// tienen T0 y cuántas de esas están en <c>[Reporting].[pdc].[Reportar_T0]</c> (y allí, con plan de acción). Del
+/// lado de las T0 solo se usa Reportar_T0 (pedido del usuario el 13-10-2026). Lleva los filtros de General (fecha,
+/// mes, sector, super, team, auditor y cargo) más situación y plantilla. Cómo se une cada auditoría con su reporte:
+/// <c>Consultas/AuditoriasT0.sql</c> y docs/contexto/t0-planes.md.
 /// </summary>
 public static class CalculadoraT0
 {
     /// <summary>Filas de la tabla de detalle (el Excel lleva todas).</summary>
     public const int FilasDetalle = 200;
-
-    /// <summary>Días seguidos sin ningún plan en <c>Legal.PlanAccion</c> a partir de los que se avisa de un hueco.</summary>
-    public const int DiasHueco = 3;
-
-    /// <summary>Días después de la auditoría en los que un hueco de PlanAccion afecta a sus planes (la alerta se gestiona después).</summary>
-    private const int DiasGestion = 15;
 
     private sealed record Dimension(string Campo, string Titulo, Func<AuditoriaT0, string?> Valor);
 
@@ -34,7 +28,10 @@ public static class CalculadoraT0
         new("plantilla", "Plantilla", a => a.Plantilla),
     ];
 
-    /// <summary>Lo filtrado: fechas elegidas y las filas que pasan todos los filtros (o todos menos uno).</summary>
+    /// <summary>Los filtros que existen también en las auditorías de General y en Reportar_T0 (no situación ni plantilla).</summary>
+    private static readonly string[] CamposComunes = ["sector", "super", "team", "auditor", "cargo"];
+
+    /// <summary>Lo filtrado: fechas elegidas y los valores marcados de cada filtro.</summary>
     private sealed class Contexto
     {
         public required DateOnly Desde { get; init; }
@@ -54,6 +51,10 @@ public static class CalculadoraT0
             }
             return true;
         }
+
+        /// <summary>Para las auditorías de General y las filas de Reportar_T0: solo los filtros que tienen.</summary>
+        public bool PasaComunes(Func<string, string?> valor)
+            => CamposComunes.All(c => Elegidos[c].Count == 0 || Elegidos[c].Contains(CalculadoraTablero.Clave(valor(c))));
     }
 
     private static Contexto CrearContexto(FiltrosTablero filtros, DateOnly calMin, DateOnly calMax)
@@ -70,8 +71,25 @@ public static class CalculadoraT0
         };
     }
 
-    /// <param name="hoy">Para los huecos de PlanAccion (hasta ayer); null = hoy.</param>
-    public static TableroModelo Calcular(InstantaneaAuditorias? datos, FiltrosTablero filtros, string? errorDatos = null, DateOnly? hoy = null)
+    private static string? Comun(Auditoria a, string campo) => campo switch
+    {
+        "sector" => a.Sector,
+        "super" => a.Super,
+        "team" => a.Team,
+        "auditor" => a.NombreAuditor,
+        _ => a.CargoAuditor,
+    };
+
+    private static string? Comun(AlertaT0 r, string campo) => campo switch
+    {
+        "sector" => r.Sector,
+        "super" => r.Super,
+        "team" => r.Team,
+        "auditor" => r.NombreAuditor,
+        _ => r.CargoAuditor,
+    };
+
+    public static TableroModelo Calcular(InstantaneaAuditorias? datos, FiltrosTablero filtros, string? errorDatos = null)
     {
         var pagina = PaginaTablero.T0;
         var vista = FiltrosTablero.LeerVista(filtros.Vista) ?? pagina.VistaInicial;
@@ -95,69 +113,73 @@ public static class CalculadoraT0
         var conColumnas = todas.Where(a => cx.Pasa(a, null)).ToList();
         var filas = conColumnas.Where(a => cx.EnFechas(a.Fecha)).ToList();
 
+        // Las auditorías de General y las filas de Reportar_T0 con los filtros que tienen.
+        var auditorias = datos.Filas.Where(a => cx.EnFechas(a.Fecha) && cx.PasaComunes(c => Comun(a, c))).ToList();
+        var reportes = (datos.ReportesT0 ?? []).Where(r => cx.EnFechas(r.Fecha) && cx.PasaComunes(c => Comun(r, c))).ToList();
+        var idsDeAuditorias = todas.Where(a => a.IdReporte is not null).Select(a => a.IdReporte!.Value).ToHashSet();
+
         var total = filas.Count;
-        var conAlerta = filas.Count(a => a.IdAlerta is not null);
-        var conPlan = filas.Count(a => a.ConPlan);
-        var verificados = filas.Count(a => a.Situacion == SituacionT0.PlanVerificado);
-        int Contar(SituacionT0 s) => filas.Count(a => a.Situacion == s);
+        var reportadas = filas.Count(a => a.Reportada);
+        var conPlan = filas.Count(a => a.Situacion == SituacionT0.ReportadaConPlan);
+        var diasGestion = Mediana(filas.Where(a => a.Reportada).Select(a => a.Reporte!.DiasGestion));
+        var sinFiltrosPropios = filtros.Plantilla.Count == 0 && filtros.Situacion.Count == 0;
+
+        // --- Por técnico de calidad / auditor -------------------------------------------------
+
+        var auditoresMarcados = cx.Elegidos["auditor"];
+        var auditoriasPor = auditorias.GroupBy(a => CalculadoraTablero.Clave(a.NombreAuditor)).ToDictionary(g => g.Key, g => g.ToList());
+        var t0Por = filas.GroupBy(a => CalculadoraTablero.Clave(a.NombreAuditor)).ToDictionary(g => g.Key, g => g.ToList());
+        var reportesPor = reportes.GroupBy(r => CalculadoraTablero.Clave(r.NombreAuditor)).ToDictionary(g => g.Key, g => g.Count());
+        var porAuditor = auditoriasPor.Keys.Union(t0Por.Keys).Union(reportesPor.Keys)
+            .Select(nombre =>
+            {
+                var suyas = auditoriasPor.GetValueOrDefault(nombre) ?? [];
+                var t0 = t0Por.GetValueOrDefault(nombre) ?? [];
+                var cargo = suyas.Select(a => a.CargoAuditor).Concat(t0.Select(a => a.CargoAuditor))
+                    .Where(c => !string.IsNullOrWhiteSpace(c)).GroupBy(c => c).OrderByDescending(g => g.Count()).Select(g => g.Key).FirstOrDefault();
+                return new FilaAuditorT0(nombre, cargo, suyas.Count, t0.Count, t0.Count(a => a.Reportada),
+                    t0.Count(a => a.Situacion == SituacionT0.ReportadaConPlan), reportesPor.GetValueOrDefault(nombre), auditoresMarcados.Contains(nombre));
+            })
+            .OrderByDescending(f => f.ConT0)
+            .ThenByDescending(f => f.Auditorias)
+            .ThenBy(f => f.Nombre, StringComparer.Create(Formato.Es, true))
+            .ToList();
 
         // --- Tarjetas -----------------------------------------------------------------------
 
+        var iceberg = auditorias.Count(a => string.Equals(a.Base, "ICEBERG", StringComparison.OrdinalIgnoreCase));
+        var auditoresSinReportar = porAuditor.Count(f => f.SinReportar > 0);
         var tarjetas = new List<TarjetaKpi>
         {
-            new("Auditorías con T0", "alerta", Formato.Entero(total), total, false, null,
-                TextoIceberg(datos, filtros, cx, total), false,
-                "Auditorías de calidad de ICEBERG con la columna «Tolerancia 0» rellena, en las fechas elegidas"),
-            new("Con alerta T0", "cruce", Formato.Entero(conAlerta), conAlerta, false, null,
-                $"{Formato.Porcentaje(Fraccion(conAlerta, total))} de las T0", false,
-                "Auditorías con su alerta en Legal.Alertas_T0 (por el ID de la llamada o, si no, por agente, auditor y fecha)",
-                Fraccion(conAlerta, total) ?? 0),
-            new("Con plan de acción", "portapapeles", Formato.Entero(conPlan), conPlan, false, null,
-                $"{Formato.Porcentaje(Fraccion(conPlan, total))} de las T0 · la regla pide todas", true,
-                "Auditorías cuya alerta T0 se gestionó con «Plan de acción»",
-                Fraccion(conPlan, total) ?? 0),
-            new("Sin plan de acción", "no-resuelta", Formato.Entero(total - conPlan), total - conPlan, false, null,
-                $"{Formato.Entero(Contar(SituacionT0.SinAlerta))} sin alerta · {Formato.Entero(Contar(SituacionT0.AlertaPendiente))} pendientes · {Formato.Entero(Contar(SituacionT0.OtraAccion))} otra acción",
-                false, "Auditorías con T0 que incumplen la regla: sin alerta, con la alerta pendiente o gestionada con otra acción"),
-            new("Plan verificado", "escudo", Formato.Entero(verificados), verificados, false, null,
-                $"{Formato.Porcentaje(Fraccion(verificados, conPlan))} de los planes están en PlanAccion", false,
-                "Planes de las alertas cuyo número existe en Legal.PlanAccion",
-                Fraccion(verificados, conPlan) ?? 0),
+            new("Auditorías", "portapapeles", Formato.Entero(auditorias.Count), auditorias.Count, false, null,
+                $"{Formato.Entero(auditoriasPor.Count)} auditores" + (sinFiltrosPropios ? "" : " · sin los filtros de situación y plantilla"), false,
+                "Todas las auditorías de las fechas elegidas (WEB e ICEBERG), como en General"),
+            new("Con T0", "alerta", Formato.Entero(total), total, false, null,
+                iceberg > 0 && sinFiltrosPropios ? $"{Formato.Porcentaje(Math.Min(1, (double)total / iceberg))} de las {Formato.Entero(iceberg)} de ICEBERG" : "auditorías de ICEBERG", false,
+                "Auditorías de ICEBERG con la columna «Tolerancia 0» rellena (los formularios WEB no tienen ese campo)"),
+            new("En Reportar_T0", "cruce", Formato.Entero(reportadas), reportadas, false, null,
+                $"{Formato.Porcentaje(Fraccion(reportadas, total))} de las T0 · deberían estar todas", true,
+                "Auditorías con T0 que están en [Reporting].[pdc].[Reportar_T0] (por el ID de la llamada o por agente, auditor y fecha)",
+                Fraccion(reportadas, total) ?? 0),
+            new("Sin reportar", "no-resuelta", Formato.Entero(total - reportadas), total - reportadas, false, null,
+                $"{Formato.Entero(auditoresSinReportar)} {(auditoresSinReportar == 1 ? "auditor" : "auditores")} con alguna sin reportar", false,
+                "Auditorías con T0 que no están en Reportar_T0"),
+            new("Con plan de acción", "escudo", Formato.Entero(conPlan), conPlan, false, null,
+                $"{Formato.Porcentaje(Fraccion(conPlan, reportadas))} de las reportadas · gestión en {TextosT0.Dias(diasGestion)} (mediana)", false,
+                "Reportadas que en Reportar_T0 se gestionaron con «Plan de acción»; la mediana es el tiempo entre el reporte y la gestión",
+                Fraccion(conPlan, reportadas) ?? 0),
         };
 
-        // --- Situación, sector, team y motivos ------------------------------------------------
+        // --- Situación, sector y plantilla ----------------------------------------------------
 
         var situaciones = Enum.GetValues<SituacionT0>()
-            .Select(s => new FilaSituacionT0(s, Contar(s), DetalleSituacion(s, filas)))
+            .Select(s => new FilaSituacionT0(s, filas.Count(a => a.Situacion == s), DetalleSituacion(s, filas)))
             .ToList();
 
-        var sectoresMarcados = cx.Elegidos["sector"];
-        var porSector = filas
-            .GroupBy(a => CalculadoraTablero.Clave(a.Sector))
-            .Select(g => Cumplimiento(g.Key, null, g, sectoresMarcados.Contains(g.Key)))
-            .OrderByDescending(f => f.Total)
-            .ThenBy(f => f.Nombre, StringComparer.Create(Formato.Es, true))
-            .ToList();
-
-        // Por team: quien gestiona la alerta y carga el plan suele ser el team leader.
-        var teamsMarcados = cx.Elegidos["team"];
-        var porTeam = filas
-            .GroupBy(a => CalculadoraTablero.Clave(a.Team))
-            .Select(g => Cumplimiento(g.Key,
-                g.GroupBy(a => a.Super).OrderByDescending(s => s.Count()).Select(s => s.Key).FirstOrDefault(),
-                g, teamsMarcados.Contains(g.Key)))
-            .OrderByDescending(f => f.SinPlan)
-            .ThenByDescending(f => f.Total)
-            .ThenBy(f => f.Nombre, StringComparer.Create(Formato.Es, true))
-            .ToList();
-
-        var motivos = filas
-            .Where(a => a.IdPlan is not null)
-            .GroupBy(a => string.IsNullOrWhiteSpace(a.MotivoPlan) ? "(Sin motivo)" : a.MotivoPlan.Trim())
-            .Select(g => (Motivo: g.Key, Cantidad: g.Count()))
-            .OrderByDescending(m => m.Cantidad)
-            .ThenBy(m => m.Motivo, StringComparer.Create(Formato.Es, true))
-            .ToList();
+        var porSector = Cumplimiento(filas, a => a.Sector, cx.Elegidos["sector"]).OrderByDescending(f => f.Total)
+            .ThenBy(f => f.Nombre, StringComparer.Create(Formato.Es, true)).ToList();
+        var porPlantilla = Cumplimiento(filas, a => a.Plantilla, cx.Elegidos["plantilla"]).OrderByDescending(f => f.SinReportar)
+            .ThenByDescending(f => f.Total).ThenBy(f => f.Nombre, StringComparer.Create(Formato.Es, true)).ToList();
 
         // --- Opciones de los filtros (se filtran entre sí, como en General) --------------------
 
@@ -192,29 +214,23 @@ public static class CalculadoraT0
             T0 = new InformeT0
             {
                 Total = total,
-                ConAlerta = conAlerta,
+                Reportadas = reportadas,
                 ConPlan = conPlan,
-                Verificados = verificados,
+                ReportesSinAuditoria = reportes.Count(r => !idsDeAuditorias.Contains(r.Id)),
+                DiasGestion = diasGestion,
                 Situaciones = situaciones,
+                PorAuditor = porAuditor,
                 PorSector = porSector,
-                PorTeam = porTeam,
-                Motivos = motivos,
-                AmbosPlanes = filas.Count(a => a.ConPlan && a.IdPlanCalidad is not null),
-                SoloAlerta = filas.Count(a => a.ConPlan && a.IdPlanCalidad is null),
-                SoloCalidad = filas.Count(a => !a.ConPlan && a.IdPlanCalidad is not null),
-                NingunPlan = filas.Count(a => !a.ConPlan && a.IdPlanCalidad is null),
+                PorPlantilla = porPlantilla,
                 Detalle = Ordenar(filas).Take(FilasDetalle).ToList(),
                 DetalleTotal = total,
-                Evolucion = CalculadoraTablero.Serie(filas, a => a.Fecha, g => FraccionConPlan(g), vista),
-                Huecos = Huecos(datos.PlanesPorDia, hoy ?? DateOnly.FromDateTime(DateTime.Today))
-                    .Where(h => h.Hasta >= cx.Desde && h.Desde <= cx.Hasta.AddDays(DiasGestion))
-                    .ToList(),
-                Error = datos.T0 is null ? datos.ErrorT0 ?? "No se pudieron leer las alertas T0." : null,
+                Evolucion = CalculadoraTablero.Serie(filas, a => a.Fecha, FraccionReportadas, vista),
+                Error = datos.T0 is null ? datos.ErrorT0 ?? "No se pudieron leer las T0." : null,
             },
         };
     }
 
-    /// <summary>Todas las auditorías T0 con los filtros, en el orden de la tabla de detalle (para el Excel).</summary>
+    /// <summary>Todas las auditorías con T0 con los filtros, en el orden de la tabla de detalle (para el Excel).</summary>
     public static IReadOnlyList<AuditoriaT0> Detalle(InstantaneaAuditorias datos, FiltrosTablero filtros)
     {
         if (datos.T0 is not { } todas || datos.PrimeraFecha is not { } calMin || datos.UltimaFecha is not { } calMax) return [];
@@ -222,50 +238,19 @@ public static class CalculadoraT0
         return Ordenar(todas.Where(a => cx.EnFechas(a.Fecha) && cx.Pasa(a, null))).ToList();
     }
 
-    /// <summary>
-    /// Tramos de al menos <see cref="DiasHueco"/> días seguidos sin ningún plan creado, desde el primer día con
-    /// planes hasta ayer. El 08-10-2026, PlanAccion no tenía planes del 14-07 al 30-09-2026.
-    /// </summary>
-    public static IReadOnlyList<HuecoPlanes> Huecos(IReadOnlyDictionary<DateOnly, int>? planesPorDia, DateOnly hoy)
-    {
-        if (planesPorDia is null || planesPorDia.Count == 0) return [];
-        var huecos = new List<HuecoPlanes>();
-        DateOnly? inicio = null;
-        var fin = hoy.AddDays(-1);
-        for (var d = planesPorDia.Keys.Min(); d <= fin; d = d.AddDays(1))
-        {
-            var hay = planesPorDia.TryGetValue(d, out var n) && n > 0;
-            if (!hay) inicio ??= d;
-            if ((hay || d == fin) && inicio is { } i)
-            {
-                var ultimo = hay ? d.AddDays(-1) : d;
-                if (ultimo.DayNumber - i.DayNumber + 1 >= DiasHueco) huecos.Add(new HuecoPlanes(i, ultimo));
-                inicio = null;
-            }
-        }
-        return huecos;
-    }
-
     // ---------------------------------------------------------------------------------------
 
-    /// <summary>Primero las que no tienen plan (sin alerta, pendientes, otra acción), de la más reciente a la más antigua.</summary>
+    /// <summary>Primero las sin reportar, luego las pendientes y las sin plan; de la más reciente a la más antigua.</summary>
     private static IEnumerable<AuditoriaT0> Ordenar(IEnumerable<AuditoriaT0> filas) => filas
         .OrderByDescending(a => (int)a.Situacion)
         .ThenByDescending(a => a.Fecha)
+        .ThenBy(a => a.NombreAuditor, StringComparer.Ordinal)
         .ThenBy(a => a.Agente, StringComparer.Ordinal);
 
-    private static FilaCumplimientoT0 Cumplimiento(string nombre, string? sub, IEnumerable<AuditoriaT0> g, bool marcado)
-    {
-        int total = 0, alerta = 0, plan = 0, verificado = 0;
-        foreach (var a in g)
-        {
-            total++;
-            if (a.IdAlerta is not null) alerta++;
-            if (a.ConPlan) plan++;
-            if (a.Situacion == SituacionT0.PlanVerificado) verificado++;
-        }
-        return new FilaCumplimientoT0(nombre, sub, total, alerta, plan, verificado, marcado);
-    }
+    private static IEnumerable<FilaCumplimientoT0> Cumplimiento(List<AuditoriaT0> filas, Func<AuditoriaT0, string?> clave, HashSet<string> marcados)
+        => filas.GroupBy(a => CalculadoraTablero.Clave(clave(a)))
+            .Select(g => new FilaCumplimientoT0(g.Key, g.Count(), g.Count(a => a.Reportada),
+                g.Count(a => a.Situacion == SituacionT0.ReportadaConPlan), marcados.Contains(g.Key)));
 
     private static string? DetalleSituacion(SituacionT0 s, List<AuditoriaT0> filas)
     {
@@ -273,52 +258,35 @@ public static class CalculadoraT0
         if (de.Count == 0) return null;
         return s switch
         {
-            SituacionT0.OtraAccion => string.Join(" · ", de
-                .GroupBy(a => string.IsNullOrWhiteSpace(a.Accion) ? "Sin acción" : a.Accion.Trim())
+            SituacionT0.ReportadaSinPlan => string.Join(" · ", de
+                .GroupBy(a => TextosT0.Texto(a.Reporte!.Gestion))
                 .OrderByDescending(g => g.Count())
                 .Select(g => $"{g.Key} {Formato.Entero(g.Count())}")),
-            SituacionT0.PlanSinVerificar => Unir(
-                (de.Count(a => a.IdAccion is null or <= 0), "sin número de plan"),
-                (de.Count(a => a.IdAccion is > 0), "con un número que no está en PlanAccion")),
-            SituacionT0.SinAlerta => Unir(
-                (de.Count(a => a.IdLlamada is null), "sin ID de llamada en la plantilla")),
+            SituacionT0.ReportadaConPlan when de.Count(a => a.Reporte!.Gestion == GestionT0.PlanSinNumero) is > 0 and var sinNumero
+                => $"{Formato.Entero(sinNumero)} sin número de plan",
+            SituacionT0.SinReportar when de.Count(a => a.IdLlamada is null) is > 0 and var sinLlamada
+                => $"{Formato.Entero(sinLlamada)} sin ID de llamada en la plantilla",
             _ => null,
         };
     }
 
-    private static string? Unir(params (int Cantidad, string Texto)[] partes)
-    {
-        var con = partes.Where(p => p.Cantidad > 0).Select(p => $"{Formato.Entero(p.Cantidad)} {p.Texto}").ToList();
-        return con.Count > 0 ? string.Join(" · ", con) : null;
-    }
-
-    /// <summary>Qué parte de las auditorías ICEBERG del filtro tienen T0 (sin los filtros de plantilla y situación, que no existen en ellas).</summary>
-    private static string TextoIceberg(InstantaneaAuditorias datos, FiltrosTablero filtros, Contexto cx, int total)
-    {
-        if (filtros.Plantilla.Count > 0 || filtros.Situacion.Count > 0) return "con los filtros elegidos";
-        var columnas = new (string Campo, Func<Auditoria, string?> Valor)[]
-        {
-            ("sector", a => a.Sector), ("super", a => a.Super), ("team", a => a.Team),
-            ("auditor", a => a.NombreAuditor), ("cargo", a => a.CargoAuditor),
-        };
-        var iceberg = datos.Filas.Count(a =>
-            string.Equals(a.Base, "ICEBERG", StringComparison.OrdinalIgnoreCase) && cx.EnFechas(a.Fecha) &&
-            columnas.All(c => cx.Elegidos[c.Campo].Count == 0 || cx.Elegidos[c.Campo].Contains(CalculadoraTablero.Clave(c.Valor(a)))));
-        return iceberg > 0
-            ? $"{Formato.Porcentaje(Math.Min(1, (double)total / iceberg))} de {Formato.Entero(iceberg)} auditorías ICEBERG"
-            : "auditorías ICEBERG";
-    }
-
     private static double? Fraccion(int parte, int total) => total > 0 ? (double)parte / total : null;
 
-    private static double? FraccionConPlan(IEnumerable<AuditoriaT0> g)
+    private static double? FraccionReportadas(IEnumerable<AuditoriaT0> g)
     {
-        int n = 0, plan = 0;
+        int n = 0, si = 0;
         foreach (var a in g)
         {
             n++;
-            if (a.ConPlan) plan++;
+            if (a.Reportada) si++;
         }
-        return n > 0 ? (double)plan / n : null;
+        return n > 0 ? (double)si / n : null;
+    }
+
+    private static double? Mediana(IEnumerable<double?> valores)
+    {
+        var v = valores.Where(x => x is not null).Select(x => x!.Value).Order().ToList();
+        if (v.Count == 0) return null;
+        return v.Count % 2 == 1 ? v[v.Count / 2] : (v[v.Count / 2 - 1] + v[v.Count / 2]) / 2;
     }
 }

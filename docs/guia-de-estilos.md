@@ -534,10 +534,12 @@ una columna de 270 px. `.recorta` ya no se usa en `td` (un `td` con `display: bl
 ### 9.14 T0 y planes de acción (`/t0`, 08-10-2026)
 
 Tercera pestaña de Auditorías (`Views/Tablero/_ContenidoT0.cshtml`, debajo de la tira de 5 indicadores de siempre) hecha con piezas que ya
-existían: `.aviso` (hueco de PlanAccion), `.crono-tarjeta` con `_LineasGaia` (% con plan, auditorías T0 en columnas grises detrás),
-`.hbarras.libre` con `.sub-ns.envuelve` y los tonos `.tono-bueno` / `.tono-neutro` / `.tono-atencion` / `.tono-critico` por situación,
-`table.ranking[data-mapa]` (sector y team, con `a.nombre-fila[data-parcial]` para filtrar, `td.barra-volumen` y TOTAL al pie), `.chip` con el
-semáforo pastel en la situación del detalle y `.pastilla-dato` con el legajo, y `ul.lista-ns`. La barra de cobertura de las tarjetas
+existían. Desde el 13-10-2026 empieza por la tabla **por técnico de calidad / auditor** (`table.ranking.con-puesto[data-mapa]`, a todo el ancho,
+con `a.nombre-fila[data-parcial]` para filtrar, `td.barra-volumen` en las auditorías, semáforo en «Sin reportar» y «% reportadas» y TOTAL al pie);
+debajo, en `.rejilla-2`, la evolución (`.crono-tarjeta` con `_LineasGaia`: % en Reportar_T0 con las T0 en columnas grises detrás) y las barras por
+situación (`.hbarras.libre` con `.sub-ns.envuelve` y los tonos `.tono-bueno` / `.tono-atencion` / `.tono-critico`); por sector y por plantilla (dos
+`table.ranking` en `.rejilla-2`, sin columna de plan para que quepan a media anchura); el detalle con `.chip` (semáforo pastel) y `.pastilla-dato`
+con el legajo, y `ul.lista-ns`. La barra de cobertura de las tarjetas
 (`.resumen-cobertura`) lleva ahora el título de su tarjeta como `aria-label`. No hay variables ni clases nuevas.
 
 

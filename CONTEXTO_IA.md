@@ -15,9 +15,9 @@
 - El Power BI «CDM Auditorías Calidad» pasado a web ASP.NET Core MVC (.NET 8, Razor): **General** y
   **Formación & Calidad**. Desde el 05-10-2026, también **CDM No solución** (`/nosolucion`), traído de
   ranking-mvc (son dos copias independientes del motor).
-- Desde el 08-10-2026, **T0 y planes de acción** (`/t0`, tercera pestaña de Auditorías, **publicado en el 5180 el 08-10-2026**): cada auditoría ICEBERG con
-  «Tolerancia 0» frente a su alerta T0 (`RecursosHumanos.Legal.Alertas_T0`) y su plan (`Legal.PlanAccion`; «Acción de Calidad» es el
-  motivo 1020). Ver `docs/contexto/t0-planes.md`.
+- Desde el 08-10-2026, **T0 y planes de acción** (`/t0`, tercera pestaña de Auditorías): desde el 13-10-2026, **por técnico de calidad /
+  auditor**: sus auditorías, las que tienen T0 (ICEBERG «Tolerancia 0») y cuántas están en **`[Reporting].[pdc].[Reportar_T0]`**, la única
+  tabla de T0 que se usa (ya no `Alertas_T0` ni `PlanAccion`). Ver `docs/contexto/t0-planes.md`.
 - Proyecto: `C:\Proyectos\CDM Auditorias Calidad\` (`CDM Auditorias Calidad.sln`: web + pruebas).
 - GitHub: `brianestivenreyjcol-rgb/Entrega` (**público**, rama `main`; nunca subir `.env`, `publicacion\`, capturas ni cachés).
 - Aspecto: `docs/guia-de-estilos.md` (SOLARIS · GAIA + sección 9, lo de esta web). Para el front está
@@ -30,9 +30,9 @@
   `Consultas/Nomina.sql`; en memoria, recarga cada 30 min; las consultas se leen en cada carga
   (editar el `.sql` + «Actualizar»). Ventana: 3 meses atrás + el mes en curso (ICEBERG con `- 3`).
   Las tablas WEB empiezan el 01/08: **el usuario avisará** cuando traigan 4 meses; no investigar.
-- T0: `Consultas/AuditoriasT0.sql` (mismo `.env`, ~8 s, en la misma recarga que las auditorías; si falla, solo esa pestaña avisa).
-  `Legal.PlanAccion` **no tiene planes del 14-07 al 30-09-2026**: la web avisa de los huecos. El login de SQL está en español:
-  en columnas `datetime`, escribir las fechas como `'20260701'`.
+- T0: `Consultas/AuditoriasT0.sql` (mismo `.env`, en la misma recarga que las auditorías; si falla, solo esa pestaña avisa): dos
+  resultados, las auditorías con T0 con su `IdReporte` de Reportar_T0 y Reportar_T0 entero. El login de SQL está en español: en
+  columnas `datetime`, escribir las fechas como `'20260701'`.
 - No solución: BigQuery por ODBC (DSN de usuario `BQCOL`), cubo de 90 días en disco (`App_Data` en
   desarrollo, `publicacion\datos` en producción), se renueva solo cada 12 h. Formato del cubo: **v3**.
 - GAIA: el Excel de nómina `\\172.16.232.102\Proyecto Ranking\2.GAIA\Formación\Nomina Iniciales General.xlsx` (solo la hoja
@@ -90,8 +90,7 @@
   BigQuery filtradas por el Excel de nómina de la compartida (filtro exacto agente + día, fallos del PBI
   corregidos; se recarga sola al guardar el Excel). Las 9 pestañas (Resumen, Ranking, Estilo,
   Rendimiento, Evolución, Comercial, Motivos, Españolización, Llamadas) hechas y **publicadas en el 5180 el 07-10-2026**. Todo en `docs/contexto/gaia-formacion.md`.
-- **T0 y planes** (`/t0`, publicado el 08-10-2026): que el usuario diga si «Registro de Falta» y «Agente dado de baja» cumplen la regla (hoy no)
-  y que pidan recargar `Legal.PlanAccion`.
+- **T0 y planes** (`/t0`): que el usuario diga si «Registro de Falta» y «Agente dado de baja» cuentan como plan (hoy no).
 - Detalle de todo esto: `docs/contexto/pendientes.md`.
 
 ## Dónde está el detalle (`docs/contexto/`)
@@ -101,7 +100,7 @@
 | `gaia-formacion.md` | toques la vista GAIA Formación (análisis de su PBI, Excel de nómina, plan por fases) |
 | `power-bi.md` | toques medidas, fechas DAX o la consulta de auditorías (análisis del PBI y cómo se pasó cada medida) |
 | `decisiones.md` | toques el informe de Auditorías: filtros, tarjetas, top 10, Excel, estilo aplicado |
-| `t0-planes.md` | toques «T0 y planes de acción»: tablas, llaves del cruce, «Acción de Calidad», hueco de PlanAccion |
+| `t0-planes.md` | toques «T0 y planes de acción»: auditorías con T0 frente a Reportar_T0 por auditor, llaves del cruce |
 | `no-solucion.md` | toques No solución: fuente, cubo, pestañas, causas atención/proceso, palabras clave |
 | `estructura-y-ejecucion.md` | necesites saber qué hay en cada carpeta o cómo se ejecuta y publica con detalle |
 | `verificacion.md` | quieras cuadrar cifras con lo que ya se comprobó contra SQL o BigQuery |

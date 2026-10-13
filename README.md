@@ -5,7 +5,7 @@ Razor), con sus mismas medidas y filtros. Lleva **tres informes**, los de la por
 
 | Informe | Dirección | Qué enseña | Datos |
 |---|---|---|---|
-| **General** (CDM · Calidad) | `/general`, `/formacion`, `/t0` | Pestañas General, Formación & Calidad y T0 y planes de acción: 5 indicadores, evolución de auditorías y nota, por sector, top 10 de auditores, T0 frente a su plan | SQL Server (`Consultas/Auditorias.sql`, `Nomina.sql`, `AuditoriasT0.sql`), en memoria, cada 30 min |
+| **General** (CDM · Calidad) | `/general`, `/formacion`, `/t0` | Pestañas General, Formación & Calidad y T0 y planes de acción: 5 indicadores, evolución de auditorías y nota, por sector, top 10 de auditores, T0 por auditor frente a `Reportar_T0` | SQL Server (`Consultas/Auditorias.sql`, `Nomina.sql`, `AuditoriasT0.sql`), en memoria, cada 30 min |
 | **CDM No solución** (CDM · Bogotá) | `/nosolucion` | Encuesta de solución de Call Bogotá (YOIGO, MASMOVIL, JAZZTEL y ORANGE): resumen, equipos, motivos y sin acceso a internet | BigQuery por ODBC (DSN `BQCOL`), cubo de 90 días en disco, se renueva cada 12 h |
 | **GAIA Formación** (GAIA · Agentes nuevos) | `/gaia` | Agentes nuevos en preconexión y aseguramiento: adherencia al estilo, rellamada, no solución, ventas y las llamadas una a una (9 pestañas) | Excel de nómina (hoja Oleadas) + BigQuery (`Consultas/Gaia*.sql`), se recarga sola al guardar el Excel |
 

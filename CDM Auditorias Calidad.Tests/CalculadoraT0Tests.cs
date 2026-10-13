@@ -7,106 +7,115 @@ public class CalculadoraT0Tests
 {
     private static DateOnly F(int m, int d) => new(2026, m, d);
 
-    /// <summary>Una auditoría T0: sin alerta si <paramref name="alerta"/> es null.</summary>
-    private static AuditoriaT0 T(DateOnly fecha, string team, long? alerta = null, string? estado = "Gestionado", string? accion = null,
-        long? idAccion = null, long? plan = null, string? motivo = null, long? planCalidad = null, string sector = "CO Técnico MasMovil")
-        => new(fecha, 100, sector, "Super 1", team, "Agente", fecha.DayNumber, "llamada", "1", "Auditor 1", "Técnico de Calidad",
-            "ESTILO YG/MM", "Desatención", 0.5, alerta, alerta is null ? null : "Llamada", null, null, alerta is null ? null : estado,
-            accion, idAccion, null, null, null, plan, null, plan is null ? null : "Abierto", motivo, planCalidad, null);
+    private static Auditoria A(DateOnly fecha, string auditor, string base_ = "ICEBERG")
+        => new(fecha, 100, "CO Técnico MasMovil", "Super 1", "Team 1", "Agente", null, "1", auditor, "Técnico de Calidad", 0.8, base_);
+
+    /// <summary>Una fila de Reportar_T0 gestionada con <paramref name="accion"/> (null = pendiente).</summary>
+    private static AlertaT0 R(long id, DateOnly fecha, string auditor, string? accion = "Plan de acción", long? idAccion = 500, double horas = 24)
+        => new(id, fecha, fecha.ToDateTime(new TimeOnly(9, 0)), fecha, null, 100, "CO Técnico MasMovil", "Super 1", "Team 1", "Agente",
+            "llamada-" + id, "Desatención", "Moderado", null, 1, auditor, "Técnico de Calidad",
+            accion is null ? "Pendiente" : "Gestionado", accion is null ? null : fecha.ToDateTime(new TimeOnly(9, 0)).AddHours(horas),
+            accion ?? "Sin acción", accion is null ? null : idAccion, null, "TL", "Team Leader", false, 1, null, null);
+
+    private static AuditoriaT0 T(DateOnly fecha, string auditor, AlertaT0? reporte = null, string plantilla = "ESTILO YG/MM")
+        => new(fecha, 100, "CO Técnico MasMovil", "Super 1", "Team 1", "Agente", fecha.DayNumber * 10 + auditor.Length, "llamada",
+            1, auditor, "Técnico de Calidad", plantilla, "Desatención", 0.5, reporte?.Id, reporte is null ? null : "Llamada")
+        { Reporte = reporte };
 
     /// <summary>
-    /// Septiembre: 6 auditorías T0 del team A y B: plan verificado (Tolerancia Cero), plan sin verificar, registro de falta,
-    /// alerta pendiente, sin alerta (con plan «Acción de Calidad» del agente) y sin alerta. Octubre: una con plan verificado.
+    /// Ana: 10 auditorías (8 ICEBERG), 5 con T0 y las 5 en Reportar_T0 (3 con plan, una con registro de falta, una pendiente).
+    /// Luis: 4 auditorías, 2 con T0, una sin reportar. Reportar_T0 tiene además una fila de Luis que no sale de ICEBERG.
     /// </summary>
-    private static InstantaneaAuditorias Datos(IReadOnlyDictionary<DateOnly, int>? planes = null) => new(
-        [new Auditoria(F(9, 1), 1, "CO Técnico MasMovil", "Super 1", "A", "Agente", null, "1", "Auditor 1", "Técnico de Calidad", 0.8, "ICEBERG"),
-         new Auditoria(F(10, 3), 1, "CO Técnico MasMovil", "Super 1", "A", "Agente", null, "1", "Auditor 1", "Técnico de Calidad", 0.8, "ICEBERG")],
-        DateTime.Now, TimeSpan.Zero, null, null,
-        [
-            T(F(9, 2), "A", 1, accion: "Plan de acción", idAccion: 900, plan: 900, motivo: "Tolerancia Cero"),
-            T(F(9, 3), "A", 2, accion: "Plan de acción", idAccion: 901),
-            T(F(9, 4), "A", 3, accion: "Registro de Falta", idAccion: 5),
-            T(F(9, 5), "B", 4, estado: "Pendiente"),
-            T(F(9, 6), "B", planCalidad: 77),
-            T(F(9, 7), "B"),
-            T(F(10, 2), "B", 5, accion: "Plan de acción", idAccion: 902, plan: 902, motivo: "Acción de Calidad", planCalidad: 902, sector: "CO Fide OUT"),
-        ],
-        null, planes);
+    private static InstantaneaAuditorias Datos()
+    {
+        var auditorias = Enumerable.Range(1, 10).Select(i => A(F(9, i), "Ana", i <= 8 ? "ICEBERG" : "WEB"))
+            .Concat(Enumerable.Range(1, 4).Select(i => A(F(9, i), "Luis"))).ToList();
+        var r1 = R(1, F(9, 1), "Ana");
+        var r2 = R(2, F(9, 2), "Ana", horas: 48);
+        var r3 = R(3, F(9, 3), "Ana", idAccion: 0, horas: 72);
+        var r4 = R(4, F(9, 4), "Ana", "Registro de Falta", 77, horas: 12);
+        var r5 = R(5, F(9, 5), "Ana", accion: null);
+        var r6 = R(6, F(9, 6), "Luis");
+        var r7 = R(7, F(9, 7), "Luis", "Agente dado de baja", 0);
+        return new InstantaneaAuditorias(auditorias, DateTime.Now, TimeSpan.Zero, null, null,
+            [T(F(9, 1), "Ana", r1), T(F(9, 2), "Ana", r2), T(F(9, 3), "Ana", r3), T(F(9, 4), "Ana", r4), T(F(9, 5), "Ana", r5),
+             T(F(9, 6), "Luis", r6), T(F(9, 8), "Luis", plantilla: "RETENCION YG")],
+            [r1, r2, r3, r4, r5, r6, r7]);
+    }
 
     [Fact]
-    public void Clasifica_cada_auditoria_frente_al_plan()
+    public void Por_auditor_cuenta_auditorias_T0_y_las_que_estan_en_Reportar_T0()
     {
         var t = CalculadoraT0.Calcular(Datos(), new FiltrosTablero()).T0!;
-        Assert.Equal(7, t.Total);
-        Assert.Equal(5, t.ConAlerta);
-        Assert.Equal(3, t.ConPlan);
-        Assert.Equal(2, t.Verificados);
-        Assert.Equal(4, t.SinPlan);
+        var ana = t.PorAuditor.Single(f => f.Nombre == "Ana");
+        Assert.Equal((10, 5, 5, 0, 3), (ana.Auditorias, ana.ConT0, ana.Reportadas, ana.SinReportar, ana.ConPlan));
+        Assert.Equal(1.0, ana.PctReportadas);
+        var luis = t.PorAuditor.Single(f => f.Nombre == "Luis");
+        Assert.Equal((4, 2, 1, 1, 2), (luis.Auditorias, luis.ConT0, luis.Reportadas, luis.SinReportar, luis.ReportesPropios));
+        Assert.Equal("Ana", t.PorAuditor[0].Nombre);
+    }
+
+    [Fact]
+    public void Clasifica_cada_T0_por_su_fila_de_Reportar_T0()
+    {
+        var m = CalculadoraT0.Calcular(Datos(), new FiltrosTablero());
+        var t = m.T0!;
+        Assert.Equal((7, 6, 1, 4), (t.Total, t.Reportadas, t.SinReportar, t.ConPlan));
         var cuenta = t.Situaciones.ToDictionary(s => s.Situacion, s => s.Cantidad);
-        Assert.Equal(2, cuenta[SituacionT0.PlanVerificado]);
-        Assert.Equal(1, cuenta[SituacionT0.PlanSinVerificar]);
-        Assert.Equal(1, cuenta[SituacionT0.OtraAccion]);
-        Assert.Equal(1, cuenta[SituacionT0.AlertaPendiente]);
-        Assert.Equal(2, cuenta[SituacionT0.SinAlerta]);
-        Assert.Equal("Registro de Falta 1", t.Situaciones.Single(s => s.Situacion == SituacionT0.OtraAccion).Detalle);
+        Assert.Equal(4, cuenta[SituacionT0.ReportadaConPlan]);
+        Assert.Equal(1, cuenta[SituacionT0.ReportadaSinPlan]);
+        Assert.Equal(1, cuenta[SituacionT0.ReportadaPendiente]);
+        Assert.Equal(1, cuenta[SituacionT0.SinReportar]);
+        Assert.Equal("Registro de falta 1", t.Situaciones.Single(s => s.Situacion == SituacionT0.ReportadaSinPlan).Detalle);
+        Assert.Equal("1 sin número de plan", t.Situaciones.Single(s => s.Situacion == SituacionT0.ReportadaConPlan).Detalle);
+        // La fila 7 de Reportar_T0 no sale de una auditoría T0 de ICEBERG.
+        Assert.Equal(1, t.ReportesSinAuditoria);
+        // Mediana de gestión de las 5 reportadas y gestionadas: 12, 24, 24, 48 y 72 horas -> 1 día.
+        Assert.Equal(1.0, t.DiasGestion!.Value, 3);
+        Assert.Equal("14", m.Tarjetas[0].Valor);
     }
 
     [Fact]
-    public void Compara_el_plan_de_la_alerta_con_accion_de_calidad()
+    public void El_detalle_empieza_por_las_sin_reportar()
     {
         var t = CalculadoraT0.Calcular(Datos(), new FiltrosTablero()).T0!;
-        Assert.Equal(1, t.AmbosPlanes);
-        Assert.Equal(2, t.SoloAlerta);
-        Assert.Equal(1, t.SoloCalidad);
-        Assert.Equal(3, t.NingunPlan);
-        Assert.Equal(new[] { ("Acción de Calidad", 1), ("Tolerancia Cero", 1) }, t.Motivos);
+        Assert.Equal(SituacionT0.SinReportar, t.Detalle[0].Situacion);
+        Assert.Equal(SituacionT0.ReportadaPendiente, t.Detalle[1].Situacion);
+        Assert.Equal(SituacionT0.ReportadaConPlan, t.Detalle[^1].Situacion);
+        Assert.Equal("RETENCION YG", t.PorPlantilla[0].Nombre);
     }
 
     [Fact]
-    public void Por_team_primero_el_que_tiene_mas_sin_plan_y_el_detalle_empieza_por_los_que_incumplen()
+    public void Filtra_por_auditor_y_situacion_y_las_opciones_se_cuentan_con_los_demas_filtros()
     {
-        var t = CalculadoraT0.Calcular(Datos(), new FiltrosTablero()).T0!;
-        Assert.Equal(new[] { "B", "A" }, t.PorTeam.Select(f => f.Nombre));
-        Assert.Equal(3, t.PorTeam[0].SinPlan);
-        Assert.Equal(SituacionT0.SinAlerta, t.Detalle[0].Situacion);
-        Assert.Equal(F(9, 7), t.Detalle[0].Fecha);
-        Assert.Equal(SituacionT0.PlanVerificado, t.Detalle[^1].Situacion);
-    }
-
-    [Fact]
-    public void Filtra_por_situacion_y_por_fechas_y_las_opciones_se_cuentan_con_los_demas_filtros()
-    {
-        var f = new FiltrosTablero { Desde = "2026-09-01", Hasta = "2026-09-30" };
-        f.Situacion.Add("Sin alerta T0");
+        var f = new FiltrosTablero();
+        f.Auditor.Add("Luis");
         var m = CalculadoraT0.Calcular(Datos(), f);
         Assert.Equal(2, m.T0!.Total);
-        Assert.All(m.T0.Detalle, a => Assert.Equal(SituacionT0.SinAlerta, a.Situacion));
-        var situacion = m.Grupos.Single(g => g.Campo == "situacion");
-        Assert.Equal(6, situacion.Opciones.Sum(o => o.Cantidad));
-        Assert.True(situacion.Opciones.Single(o => o.Valor == "Sin alerta T0").Marcada);
-        Assert.Equal(2, CalculadoraT0.Detalle(Datos(), f).Count);
+        Assert.Equal(4, int.Parse(m.Tarjetas[0].Valor, Infraestructura.Formato.Es));
+        Assert.Equal(7, m.Grupos.Single(g => g.Campo == "auditor").Opciones.Sum(o => o.Cantidad));
+
+        var s = new FiltrosTablero();
+        s.Situacion.Add("Sin reportar");
+        Assert.Single(CalculadoraT0.Detalle(Datos(), s));
     }
 
     [Fact]
-    public void Avisa_de_los_huecos_de_PlanAccion_de_tres_dias_o_mas()
+    public void Sin_T0_lo_dice_y_no_rompe()
     {
-        var planes = new Dictionary<DateOnly, int> { [F(9, 1)] = 5, [F(9, 2)] = 3, [F(9, 3)] = 1, [F(9, 8)] = 4, [F(9, 9)] = 2 };
-        // Del 4 al 7 sin planes (4 días); el 10 y el 11 tampoco, pero el 11 es ayer y solo son 2 días.
-        var huecos = CalculadoraT0.Huecos(planes, F(9, 12));
-        Assert.Equal(new[] { new HuecoPlanes(F(9, 4), F(9, 7)) }, huecos);
-        Assert.Equal(4, huecos[0].Dias);
-        // Hasta ayer: si la tabla dejó de cargarse, el hueco llega al final.
-        Assert.Equal(new HuecoPlanes(F(9, 10), F(9, 14)), CalculadoraT0.Huecos(planes, F(9, 15))[^1]);
-    }
-
-    [Fact]
-    public void Sin_alertas_T0_lo_dice_y_no_rompe()
-    {
-        var datos = new InstantaneaAuditorias(Datos().Filas, DateTime.Now, TimeSpan.Zero, null, null, null, "sin permiso en RecursosHumanos");
+        var datos = new InstantaneaAuditorias(Datos().Filas, DateTime.Now, TimeSpan.Zero, null, null, null, null, "sin permiso en Reporting.pdc");
         var m = CalculadoraT0.Calcular(datos, new FiltrosTablero());
         Assert.Equal(0, m.T0!.Total);
-        Assert.Equal("sin permiso en RecursosHumanos", m.T0.Error);
+        Assert.Equal("sin permiso en Reporting.pdc", m.T0.Error);
+        Assert.Equal(2, m.T0.PorAuditor.Count);
     }
+
+    [Theory]
+    [InlineData(null, "—")]
+    [InlineData(0.01, "menos de 1 h")]
+    [InlineData(1.0, "1 día")]
+    [InlineData(4.07, "4,1 días")]
+    public void Escribe_los_dias(double? dias, string esperado) => Assert.Equal(esperado, TextosT0.Dias(dias));
 
     [Theory]
     [InlineData("Desatención", "Desatención")]

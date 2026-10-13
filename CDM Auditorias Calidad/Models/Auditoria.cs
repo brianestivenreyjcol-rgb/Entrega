@@ -37,8 +37,8 @@ public sealed class InstantaneaAuditorias
         IReadOnlyList<RegistroNomina>? nomina = null,
         string? errorNomina = null,
         IReadOnlyList<AuditoriaT0>? t0 = null,
-        string? errorT0 = null,
-        IReadOnlyDictionary<DateOnly, int>? planesPorDia = null)
+        IReadOnlyList<AlertaT0>? reportesT0 = null,
+        string? errorT0 = null)
     {
         Filas = filas;
         CargadoEn = cargadoEn;
@@ -46,8 +46,8 @@ public sealed class InstantaneaAuditorias
         Nomina = nomina;
         ErrorNomina = errorNomina;
         T0 = t0;
+        ReportesT0 = reportesT0;
         ErrorT0 = errorT0;
-        PlanesPorDia = planesPorDia;
         if (filas.Count > 0)
         {
             PrimeraFecha = filas.Min(f => f.Fecha);
@@ -62,13 +62,13 @@ public sealed class InstantaneaAuditorias
 
     public string? ErrorNomina { get; }
 
-    /// <summary>Las auditorías ICEBERG con Tolerancia 0 y su alerta y plan (<c>Consultas/AuditoriasT0.sql</c>); null si no se pudo leer.</summary>
+    /// <summary>Las auditorías ICEBERG con Tolerancia 0, cada una con su fila de Reportar_T0 si está (<c>Consultas/AuditoriasT0.sql</c>); null si no se pudo leer.</summary>
     public IReadOnlyList<AuditoriaT0>? T0 { get; }
 
-    public string? ErrorT0 { get; }
+    /// <summary>Todas las filas de <c>[Reporting].[pdc].[Reportar_T0]</c>.</summary>
+    public IReadOnlyList<AlertaT0>? ReportesT0 { get; }
 
-    /// <summary>Planes creados cada día en <c>Legal.PlanAccion</c> en la ventana (los días sin ninguno no están): para ver sus huecos.</summary>
-    public IReadOnlyDictionary<DateOnly, int>? PlanesPorDia { get; }
+    public string? ErrorT0 { get; }
     public DateTime CargadoEn { get; }
     public TimeSpan Duracion { get; }
 
