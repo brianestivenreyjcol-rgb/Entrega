@@ -9,7 +9,7 @@ calidad con afectación T0 tiene que estar reportada en `[Reporting].[pdc].[Repo
   `Legal.PlanAccion` (ver «Historia» abajo).
 - **13-10-2026: el usuario pidió usar SOLO `Reportar_T0`** del lado de las T0 («solo con esa información») y verlo **por técnico de
   calidad / auditor**: «Ariza Hernandez, Maria Del Pilar tiene 10 auditorías, de las cuales 5 son T0 y las 5 están en Reportar_T0».
-  Esta versión **no está publicada** todavía.
+  **Publicada en el 5180 el 13-10-2026.**
 
 ## Qué se cruza (comprobado contra SQL el 13-10-2026)
 
@@ -57,6 +57,5 @@ planes de motivo «Acción de Calidad» (`PlanAccionMotivos` 1020; «Tolerancia 
 
 ## Pendiente
 
-- Publicar en el 5180 la versión por auditor cuando lo pida.
 - Que el usuario diga si «Registro de Falta» y «Agente dado de baja» cuentan como plan (hoy no).
 - Ojo al consultar a mano: el login de SQL está en español; en columnas `datetime`, las fechas como `'20260701'`.
